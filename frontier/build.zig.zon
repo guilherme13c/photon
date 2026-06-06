@@ -1,0 +1,7 @@
+.{
+    .name = .frontier,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.16.0",
+    .paths = .{""},
+    .fingerprint = 0xd22b8b625c1b62f9,
+}
