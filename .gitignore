@@ -8,3 +8,7 @@ renderer/renderer_bin
 bin/
 renderer/bin/
 fetcher/bin/
+extractor/extractor
+extractor/main.o
+*__pycache__/
+*.venv/

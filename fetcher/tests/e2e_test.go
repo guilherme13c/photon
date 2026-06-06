@@ -62,7 +62,7 @@ func TestFetcherE2E(t *testing.T) {
 	st := storage.NewStorage()
 	defer st.Close()
 
-	svc := service.NewService(hClient, st, p, outputTopic)
+	svc := service.NewService(hClient, st, p, outputTopic, "e2e-dynamic-urls", "e2e-fetcher-dlq")
 
 	// 4. Start Fetcher logic in a goroutine
 	ctxCancel, cancel := context.WithCancel(ctx)

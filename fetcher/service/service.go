@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"strings"
@@ -10,6 +11,15 @@ import (
 	"github.com/guilherme13c/fetcher/repository/kafka/consumer"
 	"github.com/guilherme13c/fetcher/repository/kafka/producer"
 	"github.com/guilherme13c/fetcher/repository/storage"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	urlsProcessed = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "fetcher_urls_processed_total",
+		Help: "The total number of processed URLs",
+	}, []string{"status"})
 )
 
 type Service struct {
@@ -18,15 +28,17 @@ type Service struct {
 	producer      producer.Producer
 	producerTopic string
 	dynamicTopic  string
+	dlqTopic      string
 }
 
-func NewService(client http_client.Client, st storage.Storage, pr producer.Producer, producerTopic string, dynamicTopic string) *Service {
+func NewService(client http_client.Client, st storage.Storage, pr producer.Producer, producerTopic string, dynamicTopic string, dlqTopic string) *Service {
 	return &Service{
 		client:        client,
 		storage:       st,
 		producer:      pr,
 		producerTopic: producerTopic,
 		dynamicTopic:  dynamicTopic,
+		dlqTopic:      dlqTopic,
 	}
 }
 
@@ -37,7 +49,11 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	// 1. Fetch HTML
 	content, err := s.client.Fetch(ctx, url)
 	if err != nil {
-		log.Printf("Failed to fetch %s: %v", url, err)
+		urlsProcessed.WithLabelValues("fetch_error").Inc()
+		log.Printf("Failed to fetch %s: %v, sending to DLQ...", url, err)
+		if dlqErr := s.producer.Produce(ctx, s.dlqTopic, []byte(url), []byte(err.Error())); dlqErr != nil {
+			log.Printf("Failed to send %s to DLQ: %v", url, dlqErr)
+		}
 		return
 	}
 
@@ -45,6 +61,7 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 
 	// 2. Heuristic Check
 	if s.isDynamic(contentStr) {
+		urlsProcessed.WithLabelValues("dynamic").Inc()
 		log.Printf("URL %s classified as dynamic, routing to renderer...", url)
 		if err := s.producer.Produce(ctx, s.dynamicTopic, []byte(url), []byte(url)); err != nil {
 			log.Printf("Failed to produce to dynamic topic for %s: %v", url, err)
@@ -57,17 +74,22 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 		URL:     url,
 		Content: contentStr,
 	}
-	if err := s.storage.Save(ctx, doc); err != nil {
+	s3Key, err := s.storage.Save(ctx, doc)
+	if err != nil {
+		urlsProcessed.WithLabelValues("storage_error").Inc()
 		log.Printf("Failed to save doc %s: %v", url, err)
 		return
 	}
 
 	// 4. Produce to Kafka for the parser service
-	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), content); err != nil {
+	payload := fmt.Sprintf(`{"url": "%s", "s3_key": "%s"}`, url, s3Key)
+	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), []byte(payload)); err != nil {
+		urlsProcessed.WithLabelValues("kafka_error").Inc()
 		log.Printf("Failed to produce message for %s: %v", url, err)
 		return
 	}
 
+	urlsProcessed.WithLabelValues("success").Inc()
 	log.Printf("Successfully processed %s", url)
 }
 

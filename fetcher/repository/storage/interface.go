@@ -8,7 +8,7 @@ type Document struct {
 }
 
 type Storage interface {
-	Save(ctx context.Context, doc Document) error
+	Save(ctx context.Context, doc Document) (string, error)
 	Close() error
 }
 

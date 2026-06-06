@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'fetcher'
+    static_configs:
+      - targets: ['fetcher:2112']
+
+  - job_name: 'embedder'
+    static_configs:
+      - targets: ['embedder:8000']

@@ -23,9 +23,9 @@ type mockStorage struct {
 	err      error
 }
 
-func (m *mockStorage) Save(ctx context.Context, doc storage.Document) error {
+func (m *mockStorage) Save(ctx context.Context, doc storage.Document) (string, error) {
 	m.savedDoc = &doc
-	return m.err
+	return "mocked-s3-key.html", m.err
 }
 
 func (m *mockStorage) Close() error {
@@ -56,7 +56,7 @@ func TestServiceProcess_Success(t *testing.T) {
 	prod := &mockProducer{}
 	producerTopic := "test-topic"
 
-	svc := NewService(client, store, prod, producerTopic)
+	svc := NewService(client, store, prod, producerTopic, "dynamic-urls", "fetcher-dlq")
 
 	msg := consumer.Message{Value: []byte("http://example.com")}
 	svc.Process(context.Background(), msg)
@@ -77,8 +77,9 @@ func TestServiceProcess_Success(t *testing.T) {
 	if string(prod.key) != "http://example.com" {
 		t.Errorf("expected producer key http://example.com, got %s", string(prod.key))
 	}
-	if string(prod.value) != "<html>Hello</html>" {
-		t.Errorf("expected producer value <html>Hello</html>, got %s", string(prod.value))
+	expectedPayload := `{"url": "http://example.com", "s3_key": "mocked-s3-key.html"}`
+	if string(prod.value) != expectedPayload {
+		t.Errorf("expected producer value %s, got %s", expectedPayload, string(prod.value))
 	}
 }
 
@@ -88,7 +89,7 @@ func TestServiceProcess_FetchError(t *testing.T) {
 	prod := &mockProducer{}
 	producerTopic := "test-topic"
 
-	svc := NewService(client, store, prod, producerTopic)
+	svc := NewService(client, store, prod, producerTopic, "dynamic-urls", "fetcher-dlq")
 
 	msg := consumer.Message{Value: []byte("http://example.com")}
 	svc.Process(context.Background(), msg)
@@ -96,7 +97,10 @@ func TestServiceProcess_FetchError(t *testing.T) {
 	if store.savedDoc != nil {
 		t.Fatal("expected document NOT to be saved on fetch error")
 	}
-	if prod.topic != "" {
-		t.Fatal("expected producer NOT to be called on fetch error")
+	if prod.topic != "fetcher-dlq" {
+		t.Errorf("expected producer to send to fetcher-dlq on fetch error, got %s", prod.topic)
+	}
+	if string(prod.value) != "fetch error" {
+		t.Errorf("expected dlq message to be fetch error, got %s", string(prod.value))
 	}
 }

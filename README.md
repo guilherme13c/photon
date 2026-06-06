@@ -21,60 +21,62 @@ A highly concurrent worker service written in Go.
 - **Fast Fetching:** Downloads raw HTML rapidly.
 - **Dynamic Heuristic Engine:** Analyzes raw HTML snippets (e.g., empty `<div id="root">`, `__NEXT_DATA__`) to classify if a page is static or a dynamic SPA.
 - **Routing:** 
-  - *Static pages* are saved to storage immediately and pushed to the parser queue.
-  - *Dynamic pages* are pushed to a `dynamic-urls` Kafka topic.
+  - *Static pages* are passed to the `fetched-pages` Kafka topic for extraction.
+  - *Dynamic pages* are passed to the Renderer.
 
 ### 3. Renderer (Go)
 A specialized worker service designed to handle modern web apps.
-- **Headless Browsing:** Uses `chromedp` to launch headless Chromium instances.
-- **Hydration:** Navigates to dynamic URLs, executes JavaScript, and waits for the DOM to fully hydrate.
-- **Extraction:** Extracts the fully rendered `outerHTML` and pushes it back into the storage and parsing pipeline.
+- **Headless Browsing:** Uses headless Chromium (via API/CDP) to navigate to dynamic URLs.
+- **Hydration:** Executes JavaScript and waits for the DOM to fully hydrate.
+- **Extraction:** Extracts the fully rendered `outerHTML` and pushes it into the `fetched-pages` pipeline.
 
-### 4. Infrastructure
-- **Apache Kafka & Zookeeper:** The central event bus connecting `Frontier` -> `Fetcher` / `Renderer` -> `Parser`.
+### 4. Extractor (Zig)
+A high-throughput parsing service for analyzing raw HTML.
+- **Link Extraction:** Parses `href` attributes to discover new links and pushes them back to the Frontier.
+- **Text Cleaning:** Strips HTML tags, styles, and scripts to extract raw text content.
+- **Forwarding:** Publishes the cleaned content to the `cleaned_documents` Kafka topic.
+
+### 5. Embedder (Python / Ray)
+The machine learning pipeline responsible for generating vector embeddings.
+- **Consumption:** Consumes from the `cleaned_documents` topic.
+- **Inference:** Uses `SentenceTransformers` (and Ray for scaling) to generate dense embeddings for each document.
+- **Storage:** Upserts the generated vectors and metadata directly into Qdrant.
+
+### 6. Infrastructure
+- **Apache Kafka & Zookeeper:** The central event bus connecting all components (`urls`, `fetched-pages`, `cleaned_documents`).
 - **Redis:** Used by the Frontier for state management and deduplication.
+- **Qdrant:** Destination vector database for semantic search.
 
 ## Prerequisites
-- **Go** >= 1.26
-- **Zig** >= 0.13.0
+- **Go** >= 1.22
+- **Zig** = 0.16.0
+- **Python** >= 3.10
 - **Docker & Docker Compose**
 - **Make**
 
 ## Getting Started
 
-### Building the Project
-You can build all the services using the provided `Makefile`:
-```bash
-make build
-```
-
 ### Running the Infrastructure
-Start the Kafka and Redis dependencies using Docker Compose:
+Start the entire 9-container infrastructure (Kafka, Redis, Qdrant, Frontier, Fetcher, Renderer, Extractor, Embedder) using Docker Compose:
 ```bash
-cd frontier
-docker-compose up -d
-cd ..
-```
-
-### Running the Services Locally
-To run the services locally in your terminal, you can start them via make:
-```bash
-make run-frontier
-make run-fetcher
-# Make sure to run the Renderer if testing dynamic pages
+docker compose up --build
 ```
 
 *(Note: In production, configure each service by setting the respective environment variables found in the `.env` templates).*
 
 ## Testing
-The repository includes a comprehensive End-to-End (E2E) testing script that spins up multiple nodes of each service, runs a local dynamic server, and tests the full distributed pipeline.
+The repository includes unit tests across all services. 
 
-To run the E2E test:
+To run Zig tests (Frontier & Extractor):
 ```bash
-./e2e_test.sh
+cd frontier && zig build test
+cd ../extractor && zig build test
 ```
 
-To run unit tests across all services:
+To run Python tests (Embedder):
 ```bash
-make test
+cd embedder
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pytest tests/
 ```

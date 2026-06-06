@@ -1,0 +1,9 @@
+ray
+confluent-kafka
+sentence-transformers
+numpy
+qdrant-client
+pytest
+pytest-mock
+minio
+prometheus-client
