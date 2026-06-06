@@ -19,7 +19,11 @@ pub const Scheduler = struct {
         domain: []const u8,
         current_time_ms: i64,
     ) !void {
-        const target_timestamp = current_time_ms + self.default_delay_ms;
+        const target_timestamp = try self.cache.updateDomainState(
+            domain,
+            current_time_ms,
+            self.default_delay_ms,
+        );
         try self.cache.pushToQueue(
             domain,
             url.canonical,
@@ -42,7 +46,11 @@ test "Scheduler calculates timestamp and pushes to Redis" {
         .canonical = "http://example.com/home",
     };
 
-    try scheduler.schedule(url, "example.com", 10000);
+    try scheduler.schedule(
+        url,
+        "example.com",
+        10000,
+    );
 
     try std.testing.expectEqual(
         @as(usize, 1),

@@ -3,6 +3,7 @@ const parseEnv = @import("config/parse.zig").parseEnv;
 const RocksDB = @import("repository/rocksDB/implementation.zig").RocksDB;
 const Redis = @import("repository/redis/implementation.zig").Redis;
 const KafkaConsumer = @import("repository/kafka/consumer/implementation.zig").KafkaConsumer;
+const KafkaProducer = @import("repository/kafka/producer/implementation.zig").KafkaProducer;
 const Service = @import("service/service.zig").Service;
 const RestServer = @import("transport/rest/server.zig").RestServer;
 
@@ -28,15 +29,31 @@ pub fn main(init: std.process.Init) !void {
         mutable_path,
     );
 
-    var rocks_db = RocksDB.init();
-    var redis = Redis.init();
-    var kafka_consumer = KafkaConsumer.init();
+    var rocks_db = try RocksDB.init(cfg.rocksdb_path);
+    defer rocks_db.deinit();
+
+    var redis = try Redis.init(cfg.redis_url);
+    defer redis.deinit();
+
+    var kafka_producer = try KafkaProducer.init(
+        cfg.kafka_brokers,
+        cfg.kafka_dlq_topic,
+    );
+    defer kafka_producer.deinit();
+
+    var kafka_consumer = try KafkaConsumer.init(
+        cfg.kafka_brokers,
+        cfg.kafka_group_id,
+        cfg.kafka_ingest_topic,
+    );
+    defer kafka_consumer.deinit();
 
     var service = Service.init(
         allocator,
         init.io,
         rocks_db.interface(),
         redis.interface(),
+        kafka_producer.interface(),
     );
 
     // Pass the reference to the global atomic boolean

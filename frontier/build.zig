@@ -8,11 +8,24 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
+        .valgrind = true,
+    });
+    root_module.linkSystemLibrary("rocksdb", .{
+        .needed = true,
+    });
+    root_module.linkSystemLibrary("hiredis", .{
+        .needed = true,
+    });
+    root_module.linkSystemLibrary("rdkafka", .{
+        .needed = true,
     });
 
     const exe = b.addExecutable(.{
         .name = "frontier",
         .root_module = root_module,
+        .use_lld = true,
+        .use_llvm = true,
     });
 
     b.installArtifact(exe);
@@ -31,10 +44,23 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
+        .valgrind = true,
+    });
+    test_module.linkSystemLibrary("rocksdb", .{
+        .needed = true,
+    });
+    root_module.linkSystemLibrary("hiredis", .{
+        .needed = true,
+    });
+    root_module.linkSystemLibrary("rdkafka", .{
+        .needed = true,
     });
 
     const unit_tests = b.addTest(.{
         .root_module = test_module,
+        .use_lld = true,
+        .use_llvm = true,
     });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);

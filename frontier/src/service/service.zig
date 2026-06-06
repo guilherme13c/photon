@@ -2,6 +2,7 @@ const std = @import("std");
 const _RocksDB = @import("../repository/rocksDB/interface.zig")._RocksDB;
 const _Redis = @import("../repository/redis/interface.zig")._Redis;
 const _KafkaConsumer = @import("../repository/kafka/consumer/interface.zig")._KafkaConsumer;
+const _KafkaProducer = @import("../repository/kafka/producer/interface.zig")._KafkaProducer;
 
 const Normalizer = @import("normalization.zig").Normalizer;
 const Deduplicator = @import("deduplication.zig").Deduplicator;
@@ -18,16 +19,32 @@ pub const Service = struct {
     filter: Filter,
     robots: RobotsChecker,
     scheduler: Scheduler,
+    dlq: _KafkaProducer,
 
-    pub fn init(allocator: std.mem.Allocator, io: std.Io, db: _RocksDB, cache: _Redis) Service {
+    pub fn init(
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        db: _RocksDB,
+        cache: _Redis,
+        dlq: _KafkaProducer,
+    ) Service {
         return .{
             .allocator = allocator,
             .io = io,
             .normalizer = Normalizer.init(allocator),
             .deduplicator = Deduplicator.init(db),
             .filter = Filter.init(),
-            .robots = RobotsChecker.init(),
-            .scheduler = Scheduler.init(cache, 2000),
+            .robots = RobotsChecker.init(
+                allocator,
+                io,
+                cache,
+                "frontier-bot",
+            ),
+            .scheduler = Scheduler.init(
+                cache,
+                2000,
+            ),
+            .dlq = dlq,
         };
     }
 
@@ -36,28 +53,44 @@ pub const Service = struct {
         defer normalized.deinit(self.allocator);
 
         if (!self.filter.isAllowed(normalized)) {
+            try self.dlq.publishDeadLetter(
+                normalized.canonical,
+                "Filtered: Invalid extension or length",
+            );
             return;
         }
 
-        if (!self.robots.isAllowed(normalized)) {
+        const domain = extractDomain(normalized.canonical);
+
+        if (!(try self.robots.isAllowed(normalized, domain))) {
+            try self.dlq.publishDeadLetter(
+                normalized.canonical,
+                "Robots: Disallowed by domain policy",
+            );
             return;
         }
 
-        const current_time_ms: i64 = @intCast(std.Io.Clock.real.now(self.io).toMilliseconds());
+        const current_time: i64 = @intCast(std.Io.Clock.real.now(self.io).toMilliseconds());
         const dedup_result = try self.deduplicator.check(
             normalized,
-            current_time_ms,
+            current_time,
         );
 
         if (dedup_result == DedupResult.is_duplicate) {
             return;
         }
 
-        const next_crawl = current_time_ms + std.time.ms_per_week;
-        try self.deduplicator.markSeen(normalized, next_crawl);
+        const next_crawl = current_time + std.time.ms_per_week;
+        try self.deduplicator.markSeen(
+            normalized,
+            next_crawl,
+        );
 
-        const domain = extractDomain(normalized.canonical);
-        try self.scheduler.schedule(normalized, domain, current_time_ms);
+        try self.scheduler.schedule(
+            normalized,
+            domain,
+            current_time,
+        );
     }
 
     pub fn processUrlBatch(self: *Service, urls: [][]const u8) !void {
@@ -116,11 +149,13 @@ test "extractDomain isolates domain correctly" {
 test "Service pipeline processes valid new URL" {
     const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
+    const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
     var db = MockRocksDB.init(std.testing.allocator);
     defer db.deinit();
 
     var cache = MockRedis.init();
+    var dlq = MockKafkaProducer.init();
 
     var threaded_io: std.Io.Threaded = .init_single_threaded;
     const io = threaded_io.io();
@@ -130,21 +165,25 @@ test "Service pipeline processes valid new URL" {
         io,
         db.interface(),
         cache.interface(),
+        dlq.interface(),
     );
 
     try svc.processUrl("http://example.com/good_page");
 
     try std.testing.expectEqual(@as(usize, 1), cache.push_count);
+    try std.testing.expectEqual(@as(usize, 0), dlq.dead_letters);
 }
 
 test "Service pipeline drops duplicate URLs" {
     const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
+    const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
     var db = MockRocksDB.init(std.testing.allocator);
     defer db.deinit();
 
     var cache = MockRedis.init();
+    var dlq = MockKafkaProducer.init();
 
     var threaded_io: std.Io.Threaded = .init_single_threaded;
     const io = threaded_io.io();
@@ -154,6 +193,7 @@ test "Service pipeline drops duplicate URLs" {
         io,
         db.interface(),
         cache.interface(),
+        dlq.interface(),
     );
 
     try svc.processUrl("http://example.com/good_page");
@@ -162,14 +202,16 @@ test "Service pipeline drops duplicate URLs" {
     try std.testing.expectEqual(@as(usize, 1), cache.push_count);
 }
 
-test "Service pipeline drops blacklisted extensions" {
+test "Service pipeline publishes blacklisted extensions to DLQ" {
     const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
+    const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
     var db = MockRocksDB.init(std.testing.allocator);
     defer db.deinit();
 
     var cache = MockRedis.init();
+    var dlq = MockKafkaProducer.init();
 
     var threaded_io: std.Io.Threaded = .init_single_threaded;
     const io = threaded_io.io();
@@ -179,9 +221,11 @@ test "Service pipeline drops blacklisted extensions" {
         io,
         db.interface(),
         cache.interface(),
+        dlq.interface(),
     );
 
     try svc.processUrl("http://example.com/document.pdf");
 
     try std.testing.expectEqual(@as(usize, 0), cache.push_count);
+    try std.testing.expectEqual(@as(usize, 1), dlq.dead_letters);
 }
