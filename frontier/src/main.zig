@@ -34,6 +34,7 @@ pub fn main(init: std.process.Init) !void {
 
     var service = Service.init(
         allocator,
+        init.io,
         rocks_db.interface(),
         redis.interface(),
     );
@@ -90,4 +91,17 @@ fn setupSignalHandlers() !void {
         &action,
         null,
     );
+}
+
+test "core test suite" {
+    _ = @import("config/parse.zig");
+    _ = @import("service/normalization.zig");
+    _ = @import("service/deduplication.zig");
+    _ = @import("service/filter.zig");
+    _ = @import("service/robots.zig");
+    _ = @import("service/scheduler.zig");
+    _ = @import("service/service.zig");
+    _ = @import("repository/rocksDB/mock.zig");
+    _ = @import("repository/redis/mock.zig");
+    _ = @import("repository/kafka/producer/mock.zig");
 }

@@ -1,7 +1,11 @@
 const std = @import("std");
 const Cfg = @import("cfg.zig").Cfg;
 
-pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cfg {
+pub fn parseEnv(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    path: []const u8,
+) !*Cfg {
     var config = try allocator.create(Cfg);
     config.* = Cfg{};
 
