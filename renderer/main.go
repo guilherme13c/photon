@@ -7,12 +7,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/guilherme13c/fetcher/config"
-	"github.com/guilherme13c/fetcher/repository/http_client"
-	"github.com/guilherme13c/fetcher/repository/kafka/consumer"
-	"github.com/guilherme13c/fetcher/repository/kafka/producer"
-	"github.com/guilherme13c/fetcher/repository/storage"
-	"github.com/guilherme13c/fetcher/service"
+	"github.com/guilherme13c/renderer/config"
+	"github.com/guilherme13c/renderer/repository/headless_client"
+	"github.com/guilherme13c/renderer/repository/kafka/consumer"
+	"github.com/guilherme13c/renderer/repository/kafka/producer"
+	"github.com/guilherme13c/renderer/repository/storage"
+	"github.com/guilherme13c/renderer/service"
 )
 
 func main() {
@@ -29,12 +29,12 @@ func main() {
 	kafkaProducer := producer.NewProducer(cfg.KafkaBroker)
 	defer kafkaProducer.Close()
 
-	httpClient := http_client.NewClient()
+	headlessClient := headless_client.NewClient()
 	storageRepo := storage.NewStorage()
 	defer storageRepo.Close()
 
 	// instantiates service using repo instances
-	svc := service.NewService(httpClient, storageRepo, kafkaProducer, cfg.KafkaProducerTopic, cfg.KafkaDynamicUrlsTopic)
+	svc := service.NewService(headlessClient, storageRepo, kafkaProducer, cfg.KafkaProducerTopic)
 
 	// starts loop to consume messages and process them
 	ctx, cancel := context.WithCancel(context.Background())

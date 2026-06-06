@@ -47,6 +47,7 @@ export MAX_ROUTINES=5
 export KAFKA_BROKER=127.0.0.1:9092
 export KAFKA_TOPIC=urls
 export KAFKA_PRODUCER_TOPIC=fetched-pages
+export KAFKA_DYNAMIC_URLS_TOPIC=dynamic-urls
 export KAFKA_GROUP=fetcher-group
 
 cd fetcher
@@ -57,20 +58,38 @@ FETCHER_PID1=$!
 FETCHER_PID2=$!
 cd ..
 
+echo "Starting Renderer..."
+export KAFKA_TOPIC=dynamic-urls
+export KAFKA_PRODUCER_TOPIC=fetched-pages
+export KAFKA_GROUP=renderer-group
+
+cd renderer
+./bin/renderer >renderer1.log 2>&1 &
+RENDERER_PID=$!
+cd ..
+
+echo "Starting local Python server for dynamic page..."
+cd test_dynamic
+python3 -m http.server 9999 >server.log 2>&1 &
+SERVER_PID=$!
+cd ..
+
 echo "Waiting for services to start..."
 sleep 5
 
 echo "Ingesting URLs to Frontier node 1..."
-curl -X POST http://localhost:8080/ingest -d '{"urls": ["http://example.com"]}' || true
+curl -X POST http://localhost:8080/ingest -d '{"urls": ["http://localhost:9999/index.html"]}' || true
 echo "Ingesting URLs to Frontier node 2..."
 curl -X POST http://localhost:8081/ingest -d '{"urls": ["http://example.org"]}' || true
 
 echo "Waiting for processing..."
-sleep 15
+sleep 30
 
-echo "Checking if fetchers and frontiers are still running..."
-if kill -0 $FRONTIER_PID1 && kill -0 $FRONTIER_PID2 && kill -0 $FETCHER_PID1 && kill -0 $FETCHER_PID2; then
+echo "Checking if all services are still running..."
+if kill -0 $FRONTIER_PID1 && kill -0 $FRONTIER_PID2 && kill -0 $FETCHER_PID1 && kill -0 $FETCHER_PID2 && kill -0 $RENDERER_PID && kill -0 $SERVER_PID; then
   echo "SUCCESS: All nodes are up and running!"
+  echo "Renderer logs:"
+  cat renderer/renderer1.log
 else
   echo "FAILURE: One or more nodes crashed."
   echo "Frontier 1 log:"
@@ -81,11 +100,13 @@ else
   cat fetcher/fetcher1.log
   echo "Fetcher 2 log:"
   cat fetcher/fetcher2.log
+  echo "Renderer 1 log:"
+  cat renderer/renderer1.log
   exit 1
 fi
 
 echo "Cleaning up..."
-kill $FRONTIER_PID1 $FRONTIER_PID2 $FETCHER_PID1 $FETCHER_PID2 || true
+kill $FRONTIER_PID1 $FRONTIER_PID2 $FETCHER_PID1 $FETCHER_PID2 $RENDERER_PID $SERVER_PID || true
 cd frontier && docker-compose down && cd ..
 
 rm frontier/.env.node*

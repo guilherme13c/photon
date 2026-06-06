@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 
+	"strings"
+
 	"github.com/guilherme13c/fetcher/repository/http_client"
 	"github.com/guilherme13c/fetcher/repository/kafka/consumer"
 	"github.com/guilherme13c/fetcher/repository/kafka/producer"
@@ -15,17 +17,18 @@ type Service struct {
 	storage       storage.Storage
 	producer      producer.Producer
 	producerTopic string
+	dynamicTopic  string
 }
 
-func NewService(client http_client.Client, st storage.Storage, pr producer.Producer, producerTopic string) *Service {
+func NewService(client http_client.Client, st storage.Storage, pr producer.Producer, producerTopic string, dynamicTopic string) *Service {
 	return &Service{
 		client:        client,
 		storage:       st,
 		producer:      pr,
 		producerTopic: producerTopic,
+		dynamicTopic:  dynamicTopic,
 	}
 }
-
 
 func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	url := string(msg.Value)
@@ -38,24 +41,45 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 		return
 	}
 
-	// 2. Save to Storage
+	contentStr := string(content)
+
+	// 2. Heuristic Check
+	if s.isDynamic(contentStr) {
+		log.Printf("URL %s classified as dynamic, routing to renderer...", url)
+		if err := s.producer.Produce(ctx, s.dynamicTopic, []byte(url), []byte(url)); err != nil {
+			log.Printf("Failed to produce to dynamic topic for %s: %v", url, err)
+		}
+		return
+	}
+
+	// 3. Save to Storage (Static)
 	doc := storage.Document{
 		URL:     url,
-		Content: string(content),
+		Content: contentStr,
 	}
 	if err := s.storage.Save(ctx, doc); err != nil {
 		log.Printf("Failed to save doc %s: %v", url, err)
 		return
 	}
 
-	// 3. Produce to Kafka for the parser service
-	// We pass the URL as the key and content as the value
+	// 4. Produce to Kafka for the parser service
 	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), content); err != nil {
 		log.Printf("Failed to produce message for %s: %v", url, err)
 		return
 	}
 
-
 	log.Printf("Successfully processed %s", url)
+}
+
+func (s *Service) isDynamic(html string) bool {
+	// Simple heuristic: check for common SPA mount points or framework signatures
+	lowerHtml := strings.ToLower(html)
+	if strings.Contains(lowerHtml, `<div id="root"></div>`) || strings.Contains(lowerHtml, `<div id="app"></div>`) {
+		return true
+	}
+	if strings.Contains(html, "window.__INITIAL_STATE__") || strings.Contains(html, "__NEXT_DATA__") {
+		return true
+	}
+	return false
 }
 

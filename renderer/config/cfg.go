@@ -5,6 +5,5 @@ type Cfg struct {
 	KafkaBroker        string
 	KafkaTopic         string
 	KafkaProducerTopic string
-	KafkaDynamicUrlsTopic string
 	KafkaGroup         string
 }

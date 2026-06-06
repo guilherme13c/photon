@@ -2,3 +2,9 @@
 */zig-out/
 *.env*
 *.log
+*.pid
+fetcher/fetcher_bin
+renderer/renderer_bin
+bin/
+renderer/bin/
+fetcher/bin/
