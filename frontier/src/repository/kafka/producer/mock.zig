@@ -3,6 +3,7 @@ const _KafkaProducer = @import("interface.zig")._KafkaProducer;
 
 pub const MockKafkaProducer = struct {
     dead_letters: usize = 0,
+    published_urls: usize = 0,
 
     pub fn init() MockKafkaProducer {
         return .{};
@@ -13,6 +14,7 @@ pub const MockKafkaProducer = struct {
             .ptr = self,
             .vtable = &.{
                 .publish_dead_letter = publishDeadLetter,
+                .publish_url = publishUrl,
             },
         };
     }
@@ -22,6 +24,13 @@ pub const MockKafkaProducer = struct {
         _ = reason;
         const self: *MockKafkaProducer = @ptrCast(@alignCast(ctx));
         self.dead_letters += 1;
+    }
+
+    fn publishUrl(ctx: *anyopaque, topic: []const u8, url: []const u8) anyerror!void {
+        _ = topic;
+        _ = url;
+        const self: *MockKafkaProducer = @ptrCast(@alignCast(ctx));
+        self.published_urls += 1;
     }
 };
 

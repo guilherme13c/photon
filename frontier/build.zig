@@ -11,9 +11,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .valgrind = true,
     });
-    root_module.linkSystemLibrary("rocksdb", .{
-        .needed = true,
-    });
+
     root_module.linkSystemLibrary("hiredis", .{
         .needed = true,
     });
@@ -47,13 +45,11 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .valgrind = true,
     });
-    test_module.linkSystemLibrary("rocksdb", .{
+
+    test_module.linkSystemLibrary("hiredis", .{
         .needed = true,
     });
-    root_module.linkSystemLibrary("hiredis", .{
-        .needed = true,
-    });
-    root_module.linkSystemLibrary("rdkafka", .{
+    test_module.linkSystemLibrary("rdkafka", .{
         .needed = true,
     });
 

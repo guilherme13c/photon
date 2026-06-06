@@ -1,10 +1,10 @@
 const std = @import("std");
 const parseEnv = @import("config/parse.zig").parseEnv;
-const RocksDB = @import("repository/rocksDB/implementation.zig").RocksDB;
 const Redis = @import("repository/redis/implementation.zig").Redis;
 const KafkaConsumer = @import("repository/kafka/consumer/implementation.zig").KafkaConsumer;
 const KafkaProducer = @import("repository/kafka/producer/implementation.zig").KafkaProducer;
 const Service = @import("service/service.zig").Service;
+const Dispatcher = @import("service/dispatcher.zig").Dispatcher;
 const RestServer = @import("transport/rest/server.zig").RestServer;
 
 // global atomic flag for signal handling
@@ -29,9 +29,6 @@ pub fn main(init: std.process.Init) !void {
         mutable_path,
     );
 
-    var rocks_db = try RocksDB.init(cfg.rocksdb_path);
-    defer rocks_db.deinit();
-
     var redis = try Redis.init(cfg.redis_url);
     defer redis.deinit();
 
@@ -51,7 +48,6 @@ pub fn main(init: std.process.Init) !void {
     var service = Service.init(
         allocator,
         init.io,
-        rocks_db.interface(),
         redis.interface(),
         kafka_producer.interface(),
     );
@@ -62,6 +58,14 @@ pub fn main(init: std.process.Init) !void {
         &service,
         cfg.port,
         &keep_running,
+    );
+
+    var dispatcher = Dispatcher.init(
+        allocator,
+        redis.interface(),
+        kafka_producer.interface(),
+        cfg.kafka_urls_topic,
+        init.io,
     );
 
     setupSignalHandlers() catch |err| {
@@ -77,6 +81,16 @@ pub fn main(init: std.process.Init) !void {
         },
     );
     kafka_thread.detach();
+
+    const dispatcher_thread = try std.Thread.spawn(
+        .{},
+        Dispatcher.startPolling,
+        .{
+            &dispatcher,
+            &keep_running,
+        },
+    );
+    dispatcher_thread.detach();
 
     std.log.info("Starting REST Server...", .{});
     try rest_server.start();
@@ -118,7 +132,6 @@ test "core test suite" {
     _ = @import("service/robots.zig");
     _ = @import("service/scheduler.zig");
     _ = @import("service/service.zig");
-    _ = @import("repository/rocksDB/mock.zig");
     _ = @import("repository/redis/mock.zig");
     _ = @import("repository/kafka/producer/mock.zig");
 }

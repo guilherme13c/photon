@@ -28,6 +28,25 @@ pub const _Redis = struct {
             current_time_ms: i64,
             delay_ms: i64,
         ) anyerror!i64,
+        get_url_metadata: *const fn (
+            ptr: *anyopaque,
+            url_hash: u64,
+        ) anyerror!?i64,
+        set_url_metadata: *const fn (
+            ptr: *anyopaque,
+            url_hash: u64,
+            next_crawl_timestamp: i64,
+        ) anyerror!void,
+        get_active_domains: *const fn (
+            ptr: *anyopaque,
+            allocator: std.mem.Allocator,
+        ) anyerror![][]const u8,
+        fetch_ready_urls: *const fn (
+            ptr: *anyopaque,
+            allocator: std.mem.Allocator,
+            domain: []const u8,
+            current_time_ms: i64,
+        ) anyerror![][]const u8,
     };
 
     pub fn pushToQueue(
@@ -81,6 +100,52 @@ pub const _Redis = struct {
             domain,
             current_time_ms,
             delay_ms,
+        );
+    }
+
+    pub fn getUrlMetadata(
+        self: _Redis,
+        url_hash: u64,
+    ) !?i64 {
+        return self.vtable.get_url_metadata(
+            self.ptr,
+            url_hash,
+        );
+    }
+
+    pub fn setUrlMetadata(
+        self: _Redis,
+        url_hash: u64,
+        next_crawl_timestamp: i64,
+    ) !void {
+        return self.vtable.set_url_metadata(
+            self.ptr,
+            url_hash,
+            next_crawl_timestamp,
+        );
+    }
+
+    pub fn getActiveDomains(
+        self: _Redis,
+        allocator: std.mem.Allocator,
+    ) ![][]const u8 {
+        return self.vtable.get_active_domains(
+            self.ptr,
+            allocator,
+        );
+    }
+
+    pub fn fetchReadyUrls(
+        self: _Redis,
+        allocator: std.mem.Allocator,
+        domain: []const u8,
+        current_time_ms: i64,
+    ) ![][]const u8 {
+        return self.vtable.fetch_ready_urls(
+            self.ptr,
+            allocator,
+            domain,
+            current_time_ms,
         );
     }
 };

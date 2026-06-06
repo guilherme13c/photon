@@ -35,7 +35,8 @@ pub const Scheduler = struct {
 test "Scheduler calculates timestamp and pushes to Redis" {
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
 
-    var mock_redis = MockRedis.init();
+    var mock_redis = MockRedis.init(std.testing.allocator);
+    defer mock_redis.deinit();
     const scheduler = Scheduler.init(
         mock_redis.interface(),
         2000,

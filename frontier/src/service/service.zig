@@ -1,5 +1,5 @@
 const std = @import("std");
-const _RocksDB = @import("../repository/rocksDB/interface.zig")._RocksDB;
+
 const _Redis = @import("../repository/redis/interface.zig")._Redis;
 const _KafkaConsumer = @import("../repository/kafka/consumer/interface.zig")._KafkaConsumer;
 const _KafkaProducer = @import("../repository/kafka/producer/interface.zig")._KafkaProducer;
@@ -24,7 +24,6 @@ pub const Service = struct {
     pub fn init(
         allocator: std.mem.Allocator,
         io: std.Io,
-        db: _RocksDB,
         cache: _Redis,
         dlq: _KafkaProducer,
     ) Service {
@@ -32,7 +31,7 @@ pub const Service = struct {
             .allocator = allocator,
             .io = io,
             .normalizer = Normalizer.init(allocator),
-            .deduplicator = Deduplicator.init(db),
+            .deduplicator = Deduplicator.init(cache),
             .filter = Filter.init(),
             .robots = RobotsChecker.init(
                 allocator,
@@ -147,14 +146,11 @@ test "extractDomain isolates domain correctly" {
 }
 
 test "Service pipeline processes valid new URL" {
-    const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
-    var db = MockRocksDB.init(std.testing.allocator);
-    defer db.deinit();
-
-    var cache = MockRedis.init();
+    var cache = MockRedis.init(std.testing.allocator);
+    defer cache.deinit();
     var dlq = MockKafkaProducer.init();
 
     var threaded_io: std.Io.Threaded = .init_single_threaded;
@@ -163,7 +159,6 @@ test "Service pipeline processes valid new URL" {
     var svc = Service.init(
         std.testing.allocator,
         io,
-        db.interface(),
         cache.interface(),
         dlq.interface(),
     );
@@ -175,14 +170,11 @@ test "Service pipeline processes valid new URL" {
 }
 
 test "Service pipeline drops duplicate URLs" {
-    const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
-    var db = MockRocksDB.init(std.testing.allocator);
-    defer db.deinit();
-
-    var cache = MockRedis.init();
+    var cache = MockRedis.init(std.testing.allocator);
+    defer cache.deinit();
     var dlq = MockKafkaProducer.init();
 
     var threaded_io: std.Io.Threaded = .init_single_threaded;
@@ -191,7 +183,6 @@ test "Service pipeline drops duplicate URLs" {
     var svc = Service.init(
         std.testing.allocator,
         io,
-        db.interface(),
         cache.interface(),
         dlq.interface(),
     );
@@ -203,14 +194,11 @@ test "Service pipeline drops duplicate URLs" {
 }
 
 test "Service pipeline publishes blacklisted extensions to DLQ" {
-    const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
-    var db = MockRocksDB.init(std.testing.allocator);
-    defer db.deinit();
-
-    var cache = MockRedis.init();
+    var cache = MockRedis.init(std.testing.allocator);
+    defer cache.deinit();
     var dlq = MockKafkaProducer.init();
 
     var threaded_io: std.Io.Threaded = .init_single_threaded;
@@ -219,7 +207,6 @@ test "Service pipeline publishes blacklisted extensions to DLQ" {
     var svc = Service.init(
         std.testing.allocator,
         io,
-        db.interface(),
         cache.interface(),
         dlq.interface(),
     );

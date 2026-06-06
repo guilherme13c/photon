@@ -1,6 +1,5 @@
 const std = @import("std");
-const _RocksDB = @import("../repository/rocksDB/interface.zig")._RocksDB;
-const UrlMetadata = @import("../repository/rocksDB/url_metadata.zig").UrlMetadata;
+const _Redis = @import("../repository/redis/interface.zig")._Redis;
 const NormalizedUrl = @import("normalization.zig").NormalizedUrl;
 
 pub const DedupResult = enum {
@@ -10,10 +9,10 @@ pub const DedupResult = enum {
 };
 
 pub const Deduplicator = struct {
-    db: _RocksDB,
+    cache: _Redis,
 
-    pub fn init(db: _RocksDB) Deduplicator {
-        return .{ .db = db };
+    pub fn init(cache: _Redis) Deduplicator {
+        return .{ .cache = cache };
     }
 
     pub fn check(
@@ -21,10 +20,10 @@ pub const Deduplicator = struct {
         url: NormalizedUrl,
         current_timestamp_ms: i64,
     ) !DedupResult {
-        const record = try self.db.get(url.hash);
+        const timestamp = try self.cache.getUrlMetadata(url.hash);
 
-        if (record) |meta| {
-            if (current_timestamp_ms >= meta.next_crawl_timestamp) {
+        if (timestamp) |ts| {
+            if (current_timestamp_ms >= ts) {
                 return DedupResult.ready_for_recrawl;
             }
             return DedupResult.is_duplicate;
@@ -38,20 +37,17 @@ pub const Deduplicator = struct {
         url: NormalizedUrl,
         next_crawl_timestamp: i64,
     ) !void {
-        const meta = UrlMetadata{
-            .next_crawl_timestamp = next_crawl_timestamp,
-        };
-        try self.db.put(url.hash, meta);
+        try self.cache.setUrlMetadata(url.hash, next_crawl_timestamp);
     }
 };
 
 test "Deduplicator accurately identifies URL states" {
-    const MockRocksDB = @import("../repository/rocksDB/mock.zig").MockRocksDB;
+    const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
 
-    var mock_db = MockRocksDB.init(std.testing.allocator);
-    defer mock_db.deinit();
+    var mock_cache = MockRedis.init(std.testing.allocator);
+    defer mock_cache.deinit();
 
-    const dedup = Deduplicator.init(mock_db.interface());
+    const dedup = Deduplicator.init(mock_cache.interface());
 
     const url = NormalizedUrl{
         .hash = 12345,
