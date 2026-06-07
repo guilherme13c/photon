@@ -19,8 +19,18 @@ func (c *headlessClientImpl) Fetch(ctx context.Context, url string) ([]byte, err
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// Create headless browser context
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, chromedp.DefaultExecAllocatorOptions[:]...)
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath("/usr/bin/chromium"),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("headless", "new"),
+		chromedp.Flag("disable-setuid-sandbox", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-software-rasterizer", true),
+		chromedp.Flag("no-zygote", true),
+		chromedp.Flag("single-process", true),
+	)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
 	defer cancelAlloc()
 
 	taskCtx, cancelTask := chromedp.NewContext(allocCtx)

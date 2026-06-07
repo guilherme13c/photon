@@ -30,8 +30,9 @@ The `fetcher` is a highly concurrent service responsible for downloading the HTM
 
 ### 3. Rendering Modern Web Apps (Go)
 The `renderer` specifically targets Single Page Applications (SPAs) and heavy JavaScript pages.
+- **Environment:** Runs on a Debian-based container (e.g. `debian:bookworm-slim`) to natively support `glibc` required by headless Chrome. CPU caps should be avoided to prevent startup latency constraints.
 - **Consumption:** Listens to the `dynamic-urls` topic.
-- **Headless Execution:** Utilizes `chromedp` to run headless Chromium instances.
+- **Headless Execution:** Utilizes `chromedp` to run headless Chromium instances with stability flags (`--no-sandbox`, `--disable-dev-shm-usage`, etc.).
 - **Hydration:** Waits for network idleness and DOM stability before extracting the rendered `outerHTML`.
 - **Forwarding:** Pushes the fully hydrated HTML back into the pipeline.
 - **Metrics:** Exposes `/metrics` via `promhttp` with `renderer_pages_rendered_total` counter (labels: `success`, `fetch_error`, `storage_error`, `produce_error`).
@@ -52,6 +53,7 @@ The final stage (Tier 3 ML Batch Processor) handles machine learning inference.
 - **Batching:** Reads batches of documents from `cleaned_documents`.
 - **Vectorization:** Runs dense embedding models (e.g., Sentence Transformers, ONNX Runtime) to convert text into vector embeddings.
 - **Storage:** Upserts the generated vectors and associated metadata directly into a Vector Database (like **Qdrant**).
+- **Execution Modes:** Architected to run on Ray for dynamic scale-out across multiple GPUs or machines depending on the inference load (`NUM_WORKERS > 1`). For environments that heavily rely on central Prometheus scraping, running in single-threaded mode (`NUM_WORKERS=1`) ensures accurate metrics collection by running the worker loop synchronously in the main thread rather than delegating it to Ray child processes.
 - **Metrics:** Exposes `/metrics` via `prometheus_client` (configurable port via `PROMETHEUS_PORT`, default `8000`) with `embeddings_processed_total` counter by status.
 
 ## Data Flow Diagram

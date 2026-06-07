@@ -10,7 +10,6 @@ from src.service.processor import EmbeddingProcessorService
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-@ray.remote
 class EmbedderWorker:
     def __init__(self, config: Config):
         self.config = config
@@ -50,17 +49,22 @@ def main():
     start_http_server(config.prometheus_port)
     logger.info(f"Started Prometheus metrics server on port {config.prometheus_port}")
 
-    ray.init()
-    
-    # Scale out by instantiating multiple actors based on configuration
-    logger.info(f"Starting {config.num_workers} Embedder workers...")
-    workers = [
-        EmbedderWorker.options(num_gpus=config.num_gpus_per_worker).remote(config) 
-        for _ in range(config.num_workers)
-    ]
-    
-    # Keep main thread alive and let actors run
-    ray.get([w.process_messages.remote() for w in workers])
+    if config.num_workers == 1:
+        logger.info("Starting single Embedder worker in main thread...")
+        worker = EmbedderWorker(config)
+        worker.process_messages()
+    else:
+        ray.init()
+        # Scale out by instantiating multiple actors based on configuration
+        logger.info(f"Starting {config.num_workers} Embedder workers...")
+        RemoteWorker = ray.remote(num_gpus=config.num_gpus_per_worker)(EmbedderWorker)
+        workers = [
+            RemoteWorker.remote(config) 
+            for _ in range(config.num_workers)
+        ]
+        
+        # Keep main thread alive and let actors run
+        ray.get([w.process_messages.remote() for w in workers])
 
 if __name__ == "__main__":
     main()

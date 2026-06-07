@@ -62,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn serveMetrics(allocator: std.mem.Allocator, service: *Service, port: u16) void {
-    var threaded = std.Io.Threaded.init(allocator, .{}) catch return;
+    var threaded = std.Io.Threaded.init(allocator, .{});
     defer threaded.deinit();
     const io = threaded.io();
 

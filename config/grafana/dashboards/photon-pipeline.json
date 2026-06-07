@@ -67,7 +67,7 @@
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "targets": [{ "expr": "embeddings_processed_total{status=\"success\"}", "legendFormat": "embedded" }],
+      "targets": [{ "expr": "embedder_messages_processed_total{status=\"success\"}", "legendFormat": "embedded" }],
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
       }
@@ -95,7 +95,7 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "targets": [
-        { "expr": "rate(urls_processed_total{status=\"success\"}[1m])", "legendFormat": "fetched/s" },
+        { "expr": "rate(fetcher_urls_processed_total{status=\"success\"}[1m])", "legendFormat": "fetched/s" },
         { "expr": "rate(renderer_pages_rendered_total{status=\"success\"}[1m])", "legendFormat": "rendered/s" }
       ]
     },
@@ -116,8 +116,8 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
       "targets": [
-        { "expr": "rate(embeddings_processed_total{status=\"success\"}[1m])", "legendFormat": "success/s" },
-        { "expr": "rate(embeddings_processed_total{status=\"process_error\"}[1m])", "legendFormat": "errors/s" }
+        { "expr": "rate(embedder_messages_processed_total{status=\"success\"}[1m])", "legendFormat": "success/s" },
+        { "expr": "rate(embedder_messages_processed_total{status=\"process_error\"}[1m])", "legendFormat": "errors/s" }
       ]
     },
     {
@@ -179,8 +179,8 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
       "targets": [
-        { "expr": "app_info_collections_total", "legendFormat": "collections" },
-        { "expr": "app_info_collections_vector_total", "legendFormat": "vectors" }
+        { "expr": "collections_total", "legendFormat": "collections" },
+        { "expr": "collections_vector_total", "legendFormat": "vectors" }
       ]
     }
   ],

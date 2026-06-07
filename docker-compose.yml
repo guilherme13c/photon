@@ -50,6 +50,7 @@ services:
       kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic fetcher-dlq --replication-factor 1 --partitions 1
       kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic extractor-dlq --replication-factor 1 --partitions 1
       kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic embedder-dlq --replication-factor 1 --partitions 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dynamic-urls --replication-factor 1 --partitions 3
       
       echo -e 'Successfully created the following topics:'
       kafka-topics --bootstrap-server kafka:29092 --list
@@ -167,13 +168,19 @@ services:
   renderer:
     build:
       context: ./renderer
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: kafka:29092
+      KAFKA_TOPIC: dynamic-urls
+      KAFKA_PRODUCER_TOPIC: fetched-pages
+      KAFKA_GROUP: renderer-group
     ports:
       - "3000:3000"
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          memory: 2G
 
   fetcher:
     build:
@@ -187,6 +194,7 @@ services:
       KAFKA_BROKER: kafka:29092
       KAFKA_TOPIC: urls
       KAFKA_PRODUCER_TOPIC: fetched-pages
+      KAFKA_DYNAMIC_URLS_TOPIC: dynamic-urls
       KAFKA_GROUP: fetcher-group
       RENDERER_URL: http://renderer:3000
       MINIO_ENDPOINT: minio:9000

@@ -28,7 +28,8 @@ A highly concurrent worker service written in Go.
 
 ### 3. Renderer (Go)
 A specialized worker service designed to handle modern web apps.
-- **Headless Browsing:** Uses headless Chromium (via API/CDP) to navigate to dynamic URLs.
+- **Environment:** Runs on a Debian-based container (e.g. `debian:bookworm-slim`) to natively support `glibc` required by headless Chrome. CPU caps should be avoided to prevent startup latency constraints.
+- **Headless Browsing:** Uses headless Chromium (via API/CDP) with stability flags (`--no-sandbox`, `--disable-dev-shm-usage`, etc.) to navigate to dynamic URLs.
 - **Hydration:** Executes JavaScript and waits for the DOM to fully hydrate.
 - **Extraction:** Extracts the fully rendered `outerHTML` and pushes it into the `fetched-pages` pipeline.
 - **Metrics:** Exposes `/metrics` via `promhttp` with `renderer_pages_rendered_total` counter (by status: success, fetch_error, storage_error, produce_error).
@@ -44,7 +45,7 @@ A high-throughput parsing service for analyzing raw HTML.
 ### 5. Embedder (Python / Ray)
 The machine learning pipeline responsible for generating vector embeddings.
 - **Consumption:** Consumes from the `cleaned_documents` topic.
-- **Inference:** Uses `SentenceTransformers` (and Ray for scaling) to generate dense embeddings for each document.
+- **Inference:** Uses `SentenceTransformers` (and Ray for scaling) to generate dense embeddings for each document. Setting `NUM_WORKERS=1` forces single-threaded execution, enabling reliable Prometheus metric scraping from the main process.
 - **Storage:** Upserts the generated vectors and metadata directly into Qdrant.
 - **Metrics:** Exposes `/metrics` via `prometheus_client` with `embeddings_processed_total` counter by status.
 

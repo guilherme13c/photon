@@ -41,10 +41,18 @@ pub const Service = struct {
 
         // Produce extracted links
         for (parsed.links.items) |link| {
-            self.producer.publishUrl(link) catch |err| {
-                std.log.err("Failed to publish extracted URL {s}: {}", .{ link, err });
+            if (link.len == 0 or std.mem.startsWith(u8, link, "javascript:") or std.mem.startsWith(u8, link, "mailto:")) {
                 continue;
-            };
+            }
+            if (self.resolveUrl(url, link)) |resolved| {
+                defer self.allocator.free(resolved);
+                self.producer.publishUrl(resolved) catch |err| {
+                    std.log.err("Failed to publish extracted URL {s}: {}", .{ resolved, err });
+                    continue;
+                };
+            } else |err| {
+                std.log.err("Failed to resolve URL {s} relative to {s}: {}", .{ link, url, err });
+            }
         }
 
         // Produce cleaned document
@@ -73,6 +81,48 @@ pub const Service = struct {
             return;
         };
         _ = self.documents_produced_total.fetchAdd(1, .monotonic);
+    }
+
+    fn resolveUrl(self: *Service, base_url: []const u8, rel_url: []const u8) ![]const u8 {
+        if (std.mem.startsWith(u8, rel_url, "http://") or std.mem.startsWith(u8, rel_url, "https://")) {
+            return self.allocator.dupe(u8, rel_url);
+        }
+
+        var scheme_host: []const u8 = base_url;
+        if (std.mem.indexOf(u8, base_url, "://")) |idx| {
+            const after_scheme = base_url[idx + 3 ..];
+            if (std.mem.indexOfScalar(u8, after_scheme, '/')) |slash_idx| {
+                scheme_host = base_url[0 .. idx + 3 + slash_idx];
+            }
+        }
+
+        if (std.mem.startsWith(u8, rel_url, "//")) {
+            if (std.mem.indexOf(u8, base_url, "://")) |idx| {
+                return std.fmt.allocPrint(self.allocator, "{s}:{s}", .{base_url[0..idx], rel_url});
+            } else {
+                return std.fmt.allocPrint(self.allocator, "http:{s}", .{rel_url});
+            }
+        } else if (std.mem.startsWith(u8, rel_url, "/")) {
+            return std.fmt.allocPrint(self.allocator, "{s}{s}", .{scheme_host, rel_url});
+        } else if (std.mem.startsWith(u8, rel_url, "#")) {
+            return std.fmt.allocPrint(self.allocator, "{s}{s}", .{base_url, rel_url});
+        } else {
+            var base_dir = base_url;
+            if (std.mem.lastIndexOfScalar(u8, base_url, '/')) |idx| {
+                if (idx >= scheme_host.len) {
+                    base_dir = base_url[0..idx + 1];
+                } else {
+                    if (!std.mem.endsWith(u8, base_dir, "/")) {
+                        return std.fmt.allocPrint(self.allocator, "{s}/{s}", .{base_dir, rel_url});
+                    }
+                }
+            }
+            if (std.mem.endsWith(u8, base_dir, "/")) {
+                return std.fmt.allocPrint(self.allocator, "{s}{s}", .{base_dir, rel_url});
+            } else {
+                return std.fmt.allocPrint(self.allocator, "{s}/{s}", .{base_dir, rel_url});
+            }
+        }
     }
 
     fn kafkaHandler(ctx: *anyopaque, key: []const u8, value: []const u8) anyerror!void {
