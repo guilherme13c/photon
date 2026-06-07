@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -7,180 +9,563 @@
   "links": [],
   "panels": [
     {
+      "title": "Pipeline Architecture",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false
+    },
+    {
+      "title": "Pipeline Architecture",
+      "type": "nodeGraph",
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "type": "json",
+          "source": "inline",
+          "data": "[{\"id\": \"frontier\", \"title\": \"Frontier\", \"subtitle\": \"URL Manager\"}, {\"id\": \"fetcher\", \"title\": \"Fetcher\", \"subtitle\": \"Downloader\"}, {\"id\": \"renderer\", \"title\": \"Renderer\", \"subtitle\": \"JS Render\"}, {\"id\": \"extractor\", \"title\": \"Extractor\", \"subtitle\": \"Content/Links\"}, {\"id\": \"embedder\", \"title\": \"Embedder\", \"subtitle\": \"Vector Gen\"}, {\"id\": \"kafka\", \"title\": \"Kafka\", \"subtitle\": \"Message Bus\"}, {\"id\": \"minio\", \"title\": \"MinIO\", \"subtitle\": \"Object Store\"}, {\"id\": \"qdrant\", \"title\": \"Qdrant\", \"subtitle\": \"Vector DB\"}, {\"id\": \"redis\", \"title\": \"Redis\", \"subtitle\": \"State\"}]",
+          "format": "table",
+          "columns": [
+            {
+              "selector": "id",
+              "text": "id",
+              "type": "string"
+            },
+            {
+              "selector": "title",
+              "text": "title",
+              "type": "string"
+            },
+            {
+              "selector": "subtitle",
+              "text": "subtitle",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "refId": "edges",
+          "type": "json",
+          "source": "inline",
+          "data": "[{\"id\": \"e1\", \"source\": \"frontier\", \"target\": \"kafka\", \"mainStat\": \"urls\"}, {\"id\": \"e2\", \"source\": \"kafka\", \"target\": \"fetcher\", \"mainStat\": \"urls\"}, {\"id\": \"e3\", \"source\": \"fetcher\", \"target\": \"renderer\", \"mainStat\": \"reqs\"}, {\"id\": \"e4\", \"source\": \"renderer\", \"target\": \"fetcher\", \"mainStat\": \"rendered\"}, {\"id\": \"e5\", \"source\": \"fetcher\", \"target\": \"minio\", \"mainStat\": \"store\"}, {\"id\": \"e6\", \"source\": \"fetcher\", \"target\": \"kafka\", \"mainStat\": \"pages\"}, {\"id\": \"e7\", \"source\": \"kafka\", \"target\": \"extractor\", \"mainStat\": \"pages\"}, {\"id\": \"e8\", \"source\": \"extractor\", \"target\": \"minio\", \"mainStat\": \"read\"}, {\"id\": \"e9\", \"source\": \"extractor\", \"target\": \"kafka\", \"mainStat\": \"docs/urls\"}, {\"id\": \"e10\", \"source\": \"kafka\", \"target\": \"frontier\", \"mainStat\": \"urls\"}, {\"id\": \"e11\", \"source\": \"kafka\", \"target\": \"embedder\", \"mainStat\": \"docs\"}, {\"id\": \"e12\", \"source\": \"embedder\", \"target\": \"qdrant\", \"mainStat\": \"vectors\"}, {\"id\": \"e13\", \"source\": \"frontier\", \"target\": \"redis\", \"mainStat\": \"state\"}]",
+          "format": "table",
+          "columns": [
+            {
+              "selector": "id",
+              "text": "id",
+              "type": "string"
+            },
+            {
+              "selector": "source",
+              "text": "source",
+              "type": "string"
+            },
+            {
+              "selector": "target",
+              "text": "target",
+              "type": "string"
+            },
+            {
+              "selector": "mainStat",
+              "text": "mainStat",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "title": "Pipeline Overview",
       "type": "row",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
       "collapsed": false
     },
     {
       "title": "URLs Ingested (Frontier)",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
-      "targets": [{ "expr": "urls_ingested_total", "legendFormat": "ingested" }],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "urls_ingested_total",
+          "legendFormat": "ingested"
+        }
+      ],
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
       }
     },
     {
       "title": "URLs Filtered (Frontier)",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
-      "targets": [{ "expr": "urls_filtered_total", "legendFormat": "filtered" }],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "urls_filtered_total",
+          "legendFormat": "filtered"
+        }
+      ],
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "yellow", "value": null }] } }
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          }
+        }
       }
     },
     {
       "title": "URLs Deduped (Frontier)",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
-      "targets": [{ "expr": "urls_deduped_total", "legendFormat": "deduped" }],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "urls_deduped_total",
+          "legendFormat": "deduped"
+        }
+      ],
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "orange", "value": null }] } }
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        }
       }
     },
     {
       "title": "Pages Rendered",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
-      "targets": [{ "expr": "renderer_pages_rendered_total{status=\"success\"}", "legendFormat": "rendered" }],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "renderer_pages_rendered_total{status=\"success\"}",
+          "legendFormat": "rendered"
+        }
+      ],
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } }
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
       }
     },
     {
       "title": "HTML Processed (Extractor)",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
-      "targets": [{ "expr": "html_processed_total", "legendFormat": "processed" }],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "html_processed_total",
+          "legendFormat": "processed"
+        }
+      ],
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "purple", "value": null }] } }
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        }
       }
     },
     {
       "title": "Embeddings Generated",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
-      "targets": [{ "expr": "embedder_messages_processed_total{status=\"success\"}", "legendFormat": "embedded" }],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 18
+      },
+      "targets": [
+        {
+          "expr": "embedder_messages_processed_total{status=\"success\"}",
+          "legendFormat": "embedded"
+        }
+      ],
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
       }
     },
     {
       "title": "Pipeline Throughput",
       "type": "row",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
       "collapsed": false
     },
     {
       "title": "Frontier Ingestion Rate",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
       "targets": [
-        { "expr": "rate(urls_ingested_total[1m])", "legendFormat": "ingested/s" },
-        { "expr": "rate(urls_filtered_total[1m])", "legendFormat": "filtered/s" },
-        { "expr": "rate(urls_deduped_total[1m])", "legendFormat": "deduped/s" }
+        {
+          "expr": "rate(urls_ingested_total[1m])",
+          "legendFormat": "ingested/s"
+        },
+        {
+          "expr": "rate(urls_filtered_total[1m])",
+          "legendFormat": "filtered/s"
+        },
+        {
+          "expr": "rate(urls_deduped_total[1m])",
+          "legendFormat": "deduped/s"
+        }
       ]
     },
     {
       "title": "Fetcher & Renderer Rate",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
       "targets": [
-        { "expr": "rate(fetcher_urls_processed_total{status=\"success\"}[1m])", "legendFormat": "fetched/s" },
-        { "expr": "rate(renderer_pages_rendered_total{status=\"success\"}[1m])", "legendFormat": "rendered/s" }
+        {
+          "expr": "rate(fetcher_urls_processed_total{status=\"success\"}[1m])",
+          "legendFormat": "fetched/s"
+        },
+        {
+          "expr": "rate(renderer_pages_rendered_total{status=\"success\"}[1m])",
+          "legendFormat": "rendered/s"
+        }
       ]
     },
     {
       "title": "Extractor & Embedder Rate",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
       "targets": [
-        { "expr": "rate(html_processed_total[1m])", "legendFormat": "extracted/s" },
-        { "expr": "rate(documents_produced_total[1m])", "legendFormat": "docs produced/s" },
-        { "expr": "rate(urls_extracted_total[1m])", "legendFormat": "urls extracted/s" }
+        {
+          "expr": "rate(html_processed_total[1m])",
+          "legendFormat": "extracted/s"
+        },
+        {
+          "expr": "rate(documents_produced_total[1m])",
+          "legendFormat": "docs produced/s"
+        },
+        {
+          "expr": "rate(urls_extracted_total[1m])",
+          "legendFormat": "urls extracted/s"
+        }
       ]
     },
     {
       "title": "Embeddings Rate",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
       "targets": [
-        { "expr": "rate(embedder_messages_processed_total{status=\"success\"}[1m])", "legendFormat": "success/s" },
-        { "expr": "rate(embedder_messages_processed_total{status=\"process_error\"}[1m])", "legendFormat": "errors/s" }
+        {
+          "expr": "rate(embedder_messages_processed_total{status=\"success\"}[1m])",
+          "legendFormat": "success/s"
+        },
+        {
+          "expr": "rate(embedder_messages_processed_total{status=\"process_error\"}[1m])",
+          "legendFormat": "errors/s"
+        }
       ]
     },
     {
       "title": "Infrastructure",
       "type": "row",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
       "collapsed": false
     },
     {
       "title": "Kafka Consumer Group Lag",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
       "targets": [
-        { "expr": "kafka_consumergroup_lag", "legendFormat": "{{consumergroup}} - {{topic}} [{{partition}}]" }
+        {
+          "expr": "kafka_consumergroup_lag",
+          "legendFormat": "{{consumergroup}} - {{topic}} [{{partition}}]"
+        }
       ]
     },
     {
       "title": "Kafka Messages In Per Topic",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 40
+      },
       "targets": [
-        { "expr": "rate(kafka_topic_partition_current_offset[1m])", "legendFormat": "{{topic}} [{{partition}}]" }
+        {
+          "expr": "rate(kafka_topic_partition_current_offset[1m])",
+          "legendFormat": "{{topic}} [{{partition}}]"
+        }
       ]
     },
     {
       "title": "Redis Memory Usage",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 31 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 48
+      },
       "targets": [
-        { "expr": "redis_memory_used_bytes", "legendFormat": "used" },
-        { "expr": "redis_memory_max_bytes", "legendFormat": "max" }
+        {
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "used"
+        },
+        {
+          "expr": "redis_memory_max_bytes",
+          "legendFormat": "max"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "bytes" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        }
+      }
     },
     {
       "title": "Redis Connected Clients",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 31 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 8,
+        "y": 48
+      },
       "targets": [
-        { "expr": "redis_connected_clients", "legendFormat": "clients" }
+        {
+          "expr": "redis_connected_clients",
+          "legendFormat": "clients"
+        }
       ]
     },
     {
       "title": "MinIO Total Objects",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 31 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 12,
+        "y": 48
+      },
       "targets": [
-        { "expr": "minio_cluster_objects_size_distribution", "legendFormat": "{{range}}" }
+        {
+          "expr": "minio_cluster_objects_size_distribution",
+          "legendFormat": "{{range}}"
+        }
       ]
     },
     {
       "title": "Qdrant Collections Points",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 48
+      },
       "targets": [
-        { "expr": "collections_total", "legendFormat": "collections" },
-        { "expr": "collections_vector_total", "legendFormat": "vectors" }
+        {
+          "expr": "collections_total",
+          "legendFormat": "collections"
+        },
+        {
+          "expr": "collections_vector_total",
+          "legendFormat": "vectors"
+        }
       ]
     }
   ],
@@ -188,7 +573,11 @@
   "templating": {
     "list": [
       {
-        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
         "hide": 0,
         "includeAll": false,
         "label": "Datasource",
@@ -201,7 +590,10 @@
       }
     ]
   },
-  "time": { "from": "now-30m", "to": "now" },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "title": "Photon Pipeline",
   "uid": "photon-pipeline",
   "version": 1
