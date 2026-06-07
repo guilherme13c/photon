@@ -42,3 +42,29 @@ pub fn handleIngest(req: *std.http.Server.Request, pipeline: *Service, allocator
 
     try req.respond("{\"status\":\"ingested\"}", .{ .status = .ok });
 }
+
+pub fn handleMetrics(req: *std.http.Server.Request, service: *Service, allocator: std.mem.Allocator) !void {
+    const ingested = service.urls_ingested_total.load(.monotonic);
+    const filtered = service.urls_filtered_total.load(.monotonic);
+    const deduped = service.urls_deduped_total.load(.monotonic);
+
+    const metrics_format =
+        \\# HELP urls_ingested_total Total URLs ingested
+        \\# TYPE urls_ingested_total counter
+        \\urls_ingested_total {}
+        \\# HELP urls_filtered_total Total URLs filtered
+        \\# TYPE urls_filtered_total counter
+        \\urls_filtered_total {}
+        \\# HELP urls_deduped_total Total URLs deduped
+        \\# TYPE urls_deduped_total counter
+        \\urls_deduped_total {}
+        \\
+    ;
+    const body = try std.fmt.allocPrint(allocator, metrics_format, .{ ingested, filtered, deduped });
+    defer allocator.free(body);
+
+    try req.respond(body, .{
+        .status = .ok,
+        .extra_headers = &.{.{ .name = "content-type", .value = "text/plain; version=0.0.4" }},
+    });
+}

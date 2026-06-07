@@ -8,4 +8,5 @@ type Cfg struct {
 	KafkaDynamicUrlsTopic string
 	KafkaGroup         string
 	KafkaDlqTopic      string
+	PrometheusPort     string
 }

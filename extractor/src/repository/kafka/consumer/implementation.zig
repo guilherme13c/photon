@@ -118,7 +118,13 @@ pub const KafkaConsumer = struct {
         const self: *KafkaConsumer = @ptrCast(@alignCast(ptr));
         self.is_running.store(true, .release);
 
+        var poll_count: usize = 0;
         while (self.is_running.load(.acquire)) {
+            if (poll_count % 10 == 0) {
+                std.log.debug("Polling Kafka... {}", .{poll_count});
+            }
+            poll_count += 1;
+            
             const msg = c.rd_kafka_consumer_poll(
                 self.rk,
                 100,

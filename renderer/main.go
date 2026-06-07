@@ -8,10 +8,12 @@ import (
 	"syscall"
 
 	"github.com/guilherme13c/renderer/config"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/guilherme13c/renderer/repository/headless_client"
 	"github.com/guilherme13c/renderer/repository/kafka/consumer"
 	"github.com/guilherme13c/renderer/repository/kafka/producer"
 	"github.com/guilherme13c/renderer/repository/storage"
+	"net/http"
 	"github.com/guilherme13c/renderer/service"
 )
 
@@ -39,6 +41,15 @@ func main() {
 	// starts loop to consume messages and process them
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Start Prometheus metrics server
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		log.Println("Starting Prometheus metrics server on :3000")
+		if err := http.ListenAndServe(":3000", nil); err != nil {
+			log.Fatalf("Metrics server failed: %v", err)
+		}
+	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

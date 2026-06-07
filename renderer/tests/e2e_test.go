@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guilherme13c/renderer/repository/http_client"
+	"github.com/guilherme13c/renderer/repository/headless_client"
 	"github.com/guilherme13c/renderer/repository/kafka/consumer"
 	"github.com/guilherme13c/renderer/repository/kafka/producer"
 	"github.com/guilherme13c/renderer/repository/storage"
@@ -58,7 +58,7 @@ func TestFetcherE2E(t *testing.T) {
 	p := producer.NewProducer(broker)
 	defer p.Close()
 
-	hClient := http_client.NewClient()
+	hClient := headless_client.NewClient()
 	st := storage.NewStorage()
 	defer st.Close()
 

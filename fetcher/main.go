@@ -18,38 +18,26 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, _ := config.Parse()
 
 	// Initialize dependencies
 	httpRepo := http_client.NewClient()
-	storageRepo := storage.NewMinIOStorage(cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey)
+	storageRepo := storage.NewStorage()
 
-	kafkaConsumer, err := consumer.NewKafkaConsumer(cfg.KafkaBrokers, cfg.KafkaGroupID, cfg.KafkaIngestTopic)
-	if err != nil {
-		log.Fatalf("Failed to create Kafka consumer: %v", err)
-	}
+	kafkaConsumer := consumer.NewConsumer(cfg.KafkaBroker, cfg.KafkaTopic, cfg.KafkaGroup)
 	defer kafkaConsumer.Close()
 
-	kafkaProducer, err := producer.NewKafkaProducer(cfg.KafkaBrokers, cfg.KafkaUrlsTopic)
-	if err != nil {
-		log.Fatalf("Failed to create Kafka producer: %v", err)
-	}
+	kafkaProducer := producer.NewProducer(cfg.KafkaBroker)
 	defer kafkaProducer.Close()
-	
-	dlqProducer, err := producer.NewKafkaProducer(cfg.KafkaBrokers, cfg.KafkaDlqTopic)
-	if err != nil {
-		log.Fatalf("Failed to create Kafka DLQ producer: %v", err)
-	}
-	defer dlqProducer.Close()
 
-	svc := service.NewService(httpRepo, kafkaProducer, storageRepo, cfg.RendererURL, dlqProducer, cfg.KafkaDlqTopic)
+	svc := service.NewService(httpRepo, storageRepo, kafkaProducer, cfg.KafkaProducerTopic, cfg.KafkaDynamicUrlsTopic, cfg.KafkaDlqTopic)
 
 	// Start Prometheus metrics server
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
-		log.Println("Starting Prometheus metrics server on :2112")
-		if err := http.ListenAndServe(":2112", nil); err != nil {
-			log.Fatalf("Failed to start metrics server: %v", err)
+		log.Printf("Starting Prometheus metrics server on :%s\n", cfg.PrometheusPort)
+		if err := http.ListenAndServe(":"+cfg.PrometheusPort, nil); err != nil {
+			log.Fatalf("Metrics server failed: %v", err)
 		}
 	}()
 

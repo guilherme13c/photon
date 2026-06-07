@@ -5,6 +5,35 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
     var config = try allocator.create(Cfg);
     config.* = Cfg{};
 
+    if (std.c.getenv("PORT")) |val| {
+        const val_str = std.mem.span(val);
+        config.port = std.fmt.parseInt(u16, val_str, 10) catch config.port;
+    }
+
+    if (std.c.getenv("REDIS_URL")) |val| {
+        config.redis_url = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_BROKERS")) |val| {
+        config.kafka_brokers = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_GROUP_ID")) |val| {
+        config.kafka_group_id = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_INGEST_TOPIC")) |val| {
+        config.kafka_ingest_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_DLQ_TOPIC")) |val| {
+        config.kafka_dlq_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_URLS_TOPIC")) |val| {
+        config.kafka_urls_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
     var file = std.Io.Dir.cwd().openFile(
         io,
         path,

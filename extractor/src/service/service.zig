@@ -5,22 +5,29 @@ const _KafkaProducer = @import("../repository/kafka/producer/interface.zig")._Ka
 
 pub const Service = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     producer: _KafkaProducer,
     minio_endpoint: []const u8,
+    html_processed_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    urls_extracted_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    documents_produced_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 
     pub fn init(
         allocator: std.mem.Allocator,
+        io: std.Io,
         producer: _KafkaProducer,
         minio_endpoint: []const u8,
     ) Service {
         return .{
             .allocator = allocator,
+            .io = io,
             .producer = producer,
             .minio_endpoint = minio_endpoint,
         };
     }
 
     pub fn processHtml(self: *Service, url: []const u8, html: []const u8, s3_key: []const u8) !void {
+        _ = self.html_processed_total.fetchAdd(1, .monotonic);
         var parsed = html_parser.parseHtml(self.allocator, html) catch |err| {
             std.log.err("Failed to parse HTML for URL {s}: {}", .{ url, err });
             self.producer.publishDeadLetter(url, "Failed to parse HTML") catch {};
@@ -28,6 +35,9 @@ pub const Service = struct {
         };
         defer parsed.text.deinit(self.allocator);
         defer parsed.links.deinit(self.allocator);
+
+        std.log.info("Extracted {} URLs", .{parsed.links.items.len});
+        _ = self.urls_extracted_total.fetchAdd(parsed.links.items.len, .monotonic);
 
         // Produce extracted links
         for (parsed.links.items) |link| {
@@ -53,31 +63,37 @@ pub const Service = struct {
 
         const json_buf = std.json.Stringify.valueAlloc(self.allocator, doc, .{}) catch |err| {
             std.log.err("Failed to serialize document to JSON for URL {s}: {}", .{ url, err });
-            self.producer.publishDeadLetter(url, "Failed to serialize JSON") catch {};
+            self.producer.publishDeadLetter(url, "Failed to serialize document") catch {};
             return;
         };
         defer self.allocator.free(json_buf);
 
         self.producer.publishCleanedDocument(url, json_buf) catch |err| {
             std.log.err("Failed to publish cleaned document for URL {s}: {}", .{ url, err });
+            return;
         };
+        _ = self.documents_produced_total.fetchAdd(1, .monotonic);
     }
 
     fn kafkaHandler(ctx: *anyopaque, key: []const u8, value: []const u8) anyerror!void {
         _ = key;
         const self: *Service = @ptrCast(@alignCast(ctx));
         
+        std.log.info("Received message payload: {s}", .{value});
+        
         const Payload = struct {
             url: []const u8,
             s3_key: []const u8,
         };
         
-        var parsed_json = std.json.parseFromSlice(Payload, self.allocator, value, .{}) catch |err| {
+        var parsed_json = std.json.parseFromSlice(Payload, self.allocator, value, .{ .ignore_unknown_fields = true }) catch |err| {
             std.log.err("Failed to parse Kafka JSON payload: {}", .{err});
             self.producer.publishDeadLetter("unknown", "Failed to parse Kafka JSON payload") catch {};
             return;
         };
         defer parsed_json.deinit();
+        
+        std.log.info("Successfully parsed payload. URL: {s}, s3_key: {s}", .{ parsed_json.value.url, parsed_json.value.s3_key });
         
         const url = parsed_json.value.url;
         const s3_key = parsed_json.value.s3_key;
@@ -85,39 +101,67 @@ pub const Service = struct {
         const s3_url = try std.fmt.allocPrint(self.allocator, "{s}/html-payloads/{s}", .{ self.minio_endpoint, s3_key });
         defer self.allocator.free(s3_url);
         
-        var client = std.http.Client{ .allocator = self.allocator };
+        var client = std.http.Client{ .allocator = self.allocator, .io = self.io };
         defer client.deinit();
         
-        const uri = std.Uri.parse(s3_url) catch {
+        const uri = std.Uri.parse(s3_url) catch |err| {
+            std.log.err("Invalid MinIO URI: {}", .{err});
             self.producer.publishDeadLetter(url, "Invalid MinIO URI") catch {};
             return;
         };
-        var req = client.open(.GET, uri, .{ .server_header_buffer = &[_]u8{} }) catch {
+        var req = client.request(.GET, uri, .{ .keep_alive = false }) catch |err| {
+            std.log.err("Failed to open GET request to MinIO: {}", .{err});
             self.producer.publishDeadLetter(url, "Failed to open GET request to MinIO") catch {};
             return;
         };
         defer req.deinit();
-        
-        req.send() catch {
+
+        std.log.info("Sending GET request to MinIO: {s}", .{s3_url});
+        req.sendBodiless() catch |err| {
+            std.log.err("Failed to send GET request to MinIO: {}", .{err});
             self.producer.publishDeadLetter(url, "Failed to send GET request to MinIO") catch {};
             return;
         };
-        req.finish() catch {
-            self.producer.publishDeadLetter(url, "Failed to finish GET request to MinIO") catch {};
+
+        var server_header_buffer: [8192]u8 = undefined;
+        std.log.info("Receiving headers from MinIO...", .{});
+        var response = req.receiveHead(&server_header_buffer) catch |err| {
+            std.log.err("Failed to receive headers from MinIO: {}", .{err});
+            self.producer.publishDeadLetter(url, "Failed to receive headers from MinIO") catch {};
             return;
         };
-        req.wait() catch {
-            self.producer.publishDeadLetter(url, "Failed to wait GET request to MinIO") catch {};
+        std.log.info("Received headers. Status: {}", .{response.head.status});
+
+        if (response.head.status != .ok) {
+            self.producer.publishDeadLetter(url, "Non-OK status from MinIO") catch {};
             return;
-        };
+        }
+
+        var buf: [8192]u8 = undefined;
+        var reader = response.reader(&buf);
+        var body_arr = std.ArrayList(u8).empty;
+        defer body_arr.deinit(self.allocator);
         
-        const html = req.reader().readAllAlloc(self.allocator, 1024 * 1024 * 10) catch {
+        while (true) {
+            const bytes_read = reader.readSliceShort(&buf) catch {
+                self.producer.publishDeadLetter(url, "Failed to read HTML payload chunk") catch {};
+                return;
+            };
+            if (bytes_read == 0) break;
+            body_arr.appendSlice(self.allocator, buf[0..bytes_read]) catch {
+                self.producer.publishDeadLetter(url, "Failed to append HTML payload chunk") catch {};
+                return;
+            };
+        }
+        
+        const html_content = body_arr.toOwnedSlice(self.allocator) catch {
             self.producer.publishDeadLetter(url, "Failed to read HTML payload") catch {};
             return;
-        }; // max 10MB
-        defer self.allocator.free(html);
+        };
+        defer self.allocator.free(html_content);
+        std.log.info("Read {} bytes of HTML content.", .{html_content.len});
         
-        try self.processHtml(url, html, s3_key);
+        try self.processHtml(url, html_content, s3_key);
     }
 
     pub fn startConsuming(self: *Service, consumer: _KafkaConsumer) !void {
@@ -130,7 +174,7 @@ test "Service processes HTML and produces messages" {
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
     var producer = MockKafkaProducer.init();
     
-    var svc = Service.init(std.testing.allocator, producer.interface(), "http://dummy");
+    var svc = Service.init(std.testing.allocator, undefined, producer.interface(), "http://dummy");
 
     const html = 
         \\<html><head><title>Test</title></head>

@@ -1,0 +1,208 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Pipeline Overview",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "URLs Ingested (Frontier)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "targets": [{ "expr": "urls_ingested_total", "legendFormat": "ingested" }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      }
+    },
+    {
+      "title": "URLs Filtered (Frontier)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "targets": [{ "expr": "urls_filtered_total", "legendFormat": "filtered" }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "yellow", "value": null }] } }
+      }
+    },
+    {
+      "title": "URLs Deduped (Frontier)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "targets": [{ "expr": "urls_deduped_total", "legendFormat": "deduped" }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "orange", "value": null }] } }
+      }
+    },
+    {
+      "title": "Pages Rendered",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "targets": [{ "expr": "renderer_pages_rendered_total{status=\"success\"}", "legendFormat": "rendered" }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } }
+      }
+    },
+    {
+      "title": "HTML Processed (Extractor)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "targets": [{ "expr": "html_processed_total", "legendFormat": "processed" }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "purple", "value": null }] } }
+      }
+    },
+    {
+      "title": "Embeddings Generated",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "targets": [{ "expr": "embeddings_processed_total{status=\"success\"}", "legendFormat": "embedded" }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      }
+    },
+    {
+      "title": "Pipeline Throughput",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false
+    },
+    {
+      "title": "Frontier Ingestion Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "expr": "rate(urls_ingested_total[1m])", "legendFormat": "ingested/s" },
+        { "expr": "rate(urls_filtered_total[1m])", "legendFormat": "filtered/s" },
+        { "expr": "rate(urls_deduped_total[1m])", "legendFormat": "deduped/s" }
+      ]
+    },
+    {
+      "title": "Fetcher & Renderer Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        { "expr": "rate(urls_processed_total{status=\"success\"}[1m])", "legendFormat": "fetched/s" },
+        { "expr": "rate(renderer_pages_rendered_total{status=\"success\"}[1m])", "legendFormat": "rendered/s" }
+      ]
+    },
+    {
+      "title": "Extractor & Embedder Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        { "expr": "rate(html_processed_total[1m])", "legendFormat": "extracted/s" },
+        { "expr": "rate(documents_produced_total[1m])", "legendFormat": "docs produced/s" },
+        { "expr": "rate(urls_extracted_total[1m])", "legendFormat": "urls extracted/s" }
+      ]
+    },
+    {
+      "title": "Embeddings Rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        { "expr": "rate(embeddings_processed_total{status=\"success\"}[1m])", "legendFormat": "success/s" },
+        { "expr": "rate(embeddings_processed_total{status=\"process_error\"}[1m])", "legendFormat": "errors/s" }
+      ]
+    },
+    {
+      "title": "Infrastructure",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "collapsed": false
+    },
+    {
+      "title": "Kafka Consumer Group Lag",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "targets": [
+        { "expr": "kafka_consumergroup_lag", "legendFormat": "{{consumergroup}} - {{topic}} [{{partition}}]" }
+      ]
+    },
+    {
+      "title": "Kafka Messages In Per Topic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "targets": [
+        { "expr": "rate(kafka_topic_partition_current_offset[1m])", "legendFormat": "{{topic}} [{{partition}}]" }
+      ]
+    },
+    {
+      "title": "Redis Memory Usage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 31 },
+      "targets": [
+        { "expr": "redis_memory_used_bytes", "legendFormat": "used" },
+        { "expr": "redis_memory_max_bytes", "legendFormat": "max" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "title": "Redis Connected Clients",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 31 },
+      "targets": [
+        { "expr": "redis_connected_clients", "legendFormat": "clients" }
+      ]
+    },
+    {
+      "title": "MinIO Total Objects",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 31 },
+      "targets": [
+        { "expr": "minio_cluster_objects_size_distribution", "legendFormat": "{{range}}" }
+      ]
+    },
+    {
+      "title": "Qdrant Collections Points",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 31 },
+      "targets": [
+        { "expr": "app_info_collections_total", "legendFormat": "collections" },
+        { "expr": "app_info_collections_vector_total", "legendFormat": "vectors" }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-30m", "to": "now" },
+  "title": "Photon Pipeline",
+  "uid": "photon-pipeline",
+  "version": 1
+}

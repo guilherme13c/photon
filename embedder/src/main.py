@@ -47,8 +47,8 @@ from prometheus_client import start_http_server
 def main():
     config = Config()
 
-    start_http_server(8000)
-    logger.info("Started Prometheus metrics server on port 8000")
+    start_http_server(config.prometheus_port)
+    logger.info(f"Started Prometheus metrics server on port {config.prometheus_port}")
 
     ray.init()
     

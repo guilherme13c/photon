@@ -22,6 +22,8 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
     var tag_start_idx: usize = 0;
     var title_start_idx: usize = 0;
 
+        var tag_name_done = false;
+
     var i: usize = 0;
     while (i < html.len) : (i += 1) {
         const c = html[i];
@@ -29,6 +31,7 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
             in_tag = true;
             is_closing_tag = false;
             tag_name_len = 0;
+            tag_name_done = false;
             tag_start_idx = i;
             
             if (i + 1 < html.len and html[i + 1] == '/') {
@@ -73,12 +76,10 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
                 }
             }
         } else if (in_tag) {
-            if (tag_name_len < tag_name_buf.len) {
+            if (!tag_name_done and tag_name_len < tag_name_buf.len) {
                 if (c == ' ' or c == '\n' or c == '\r' or c == '\t') {
-                    // Tag name ends at first space
-                    if (tag_name_len == 0) continue; // Leading space after <
-                    // We don't add to tag_name anymore, but we're still in tag
-                } else if (tag_name_len == 0 or (tag_name_len > 0 and tag_name_buf[tag_name_len-1] != ' ')) {
+                    if (tag_name_len > 0) tag_name_done = true;
+                } else {
                     tag_name_buf[tag_name_len] = c;
                     tag_name_len += 1;
                 }

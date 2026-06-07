@@ -5,6 +5,34 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
     var config = try allocator.create(Cfg);
     config.* = Cfg{};
 
+    if (std.c.getenv("KAFKA_BROKERS")) |val| {
+        config.kafka_brokers = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_GROUP_ID")) |val| {
+        config.kafka_group_id = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_INGEST_TOPIC")) |val| {
+        config.kafka_ingest_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_URLS_TOPIC")) |val| {
+        config.kafka_urls_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_CLEANED_TOPIC")) |val| {
+        config.kafka_cleaned_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("KAFKA_DLQ_TOPIC")) |val| {
+        config.kafka_dlq_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
+    if (std.c.getenv("MINIO_ENDPOINT")) |val| {
+        config.minio_endpoint = try allocator.dupe(u8, std.mem.span(val));
+    }
+
     var file = std.Io.Dir.cwd().openFile(
         io,
         path,
@@ -68,8 +96,17 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
             config.kafka_urls_topic = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_CLEANED_TOPIC")) {
             config.kafka_cleaned_topic = try allocator.dupe(u8, val);
+        } else if (std.mem.eql(u8, key, "KAFKA_DLQ_TOPIC")) {
+            config.kafka_dlq_topic = try allocator.dupe(u8, val);
+        } else if (std.mem.eql(u8, key, "MINIO_ENDPOINT")) {
+            if (val.len > 0) {
+                config.minio_endpoint = try allocator.dupe(u8, val);
+            }
+        } else if (std.mem.eql(u8, key, "PROMETHEUS_PORT")) {
+            if (val.len > 0) {
+                config.prometheus_port = try std.fmt.parseInt(u16, val, 10);
+            }
         }
     }
-
     return config;
 }

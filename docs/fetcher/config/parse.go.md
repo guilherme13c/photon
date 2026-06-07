@@ -29,13 +29,20 @@ func Parse() (*Cfg, error) {
 		maxRoutines = 10
 	}
 
+	promPort := os.Getenv("PROMETHEUS_PORT")
+	if promPort == "" {
+		promPort = "2112"
+	}
+
 	return &Cfg{
-		MaxRoutines:        maxRoutines,
-		KafkaBroker:        os.Getenv("KAFKA_BROKER"),
-		KafkaTopic:         os.Getenv("KAFKA_TOPIC"),
+		MaxRoutines:           maxRoutines,
+		KafkaBroker:           os.Getenv("KAFKA_BROKER"),
+		KafkaTopic:            os.Getenv("KAFKA_TOPIC"),
 		KafkaProducerTopic:    os.Getenv("KAFKA_PRODUCER_TOPIC"),
 		KafkaDynamicUrlsTopic: os.Getenv("KAFKA_DYNAMIC_URLS_TOPIC"),
 		KafkaGroup:            os.Getenv("KAFKA_GROUP"),
+		KafkaDlqTopic:         os.Getenv("KAFKA_DLQ_TOPIC"),
+		PrometheusPort:        promPort,
 	}, nil
 
 }

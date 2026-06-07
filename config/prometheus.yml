@@ -1,0 +1,67 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'fetcher'
+    dns_sd_configs:
+      - names:
+          - 'fetcher'
+        type: 'A'
+        port: 2112
+
+  - job_name: 'embedder'
+    dns_sd_configs:
+      - names:
+          - 'embedder'
+        type: 'A'
+        port: 8000
+
+  - job_name: 'kafka'
+    dns_sd_configs:
+      - names:
+          - 'kafka-exporter'
+        type: 'A'
+        port: 9308
+
+  - job_name: 'redis'
+    dns_sd_configs:
+      - names:
+          - 'redis-exporter'
+        type: 'A'
+        port: 9121
+
+  - job_name: 'minio'
+    metrics_path: /minio/v2/metrics/cluster
+    dns_sd_configs:
+      - names:
+          - 'minio'
+        type: 'A'
+        port: 9000
+
+  - job_name: 'qdrant'
+    dns_sd_configs:
+      - names:
+          - 'qdrant'
+        type: 'A'
+        port: 6333
+
+  - job_name: 'frontier'
+    dns_sd_configs:
+      - names:
+          - 'frontier'
+        type: 'A'
+        port: 8080
+
+  - job_name: 'extractor'
+    dns_sd_configs:
+      - names:
+          - 'extractor'
+        type: 'A'
+        port: 8001
+
+  - job_name: 'renderer'
+    dns_sd_configs:
+      - names:
+          - 'renderer'
+        type: 'A'
+        port: 3000

@@ -20,6 +20,9 @@ pub const Service = struct {
     robots: RobotsChecker,
     scheduler: Scheduler,
     dlq: _KafkaProducer,
+    urls_ingested_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    urls_filtered_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    urls_deduped_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -48,10 +51,12 @@ pub const Service = struct {
     }
 
     pub fn processUrl(self: *Service, raw_url: []const u8) !void {
+        _ = self.urls_ingested_total.fetchAdd(1, .monotonic);
         const normalized = try self.normalizer.process(raw_url);
         defer normalized.deinit(self.allocator);
 
         if (!self.filter.isAllowed(normalized)) {
+            _ = self.urls_filtered_total.fetchAdd(1, .monotonic);
             try self.dlq.publishDeadLetter(
                 normalized.canonical,
                 "Filtered: Invalid extension or length",
@@ -76,6 +81,7 @@ pub const Service = struct {
         );
 
         if (dedup_result == DedupResult.is_duplicate) {
+            _ = self.urls_deduped_total.fetchAdd(1, .monotonic);
             return;
         }
 

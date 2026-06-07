@@ -8,6 +8,15 @@ import (
 	"github.com/guilherme13c/renderer/repository/kafka/consumer"
 	"github.com/guilherme13c/renderer/repository/kafka/producer"
 	"github.com/guilherme13c/renderer/repository/storage"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	pagesRenderedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "renderer_pages_rendered_total",
+		Help: "The total number of pages rendered",
+	}, []string{"status"})
 )
 
 type Service struct {
@@ -35,6 +44,7 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	content, err := s.client.Fetch(ctx, url)
 	if err != nil {
 		log.Printf("Failed to fetch %s: %v", url, err)
+		pagesRenderedTotal.WithLabelValues("fetch_error").Inc()
 		return
 	}
 
@@ -45,6 +55,7 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	}
 	if err := s.storage.Save(ctx, doc); err != nil {
 		log.Printf("Failed to save doc %s: %v", url, err)
+		pagesRenderedTotal.WithLabelValues("storage_error").Inc()
 		return
 	}
 
@@ -52,10 +63,12 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	// We pass the URL as the key and content as the value
 	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), content); err != nil {
 		log.Printf("Failed to produce message for %s: %v", url, err)
+		pagesRenderedTotal.WithLabelValues("produce_error").Inc()
 		return
 	}
 
 
 	log.Printf("Successfully processed %s", url)
+	pagesRenderedTotal.WithLabelValues("success").Inc()
 }
 

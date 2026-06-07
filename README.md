@@ -14,6 +14,7 @@ The central brain of the crawler. It is written in Zig for maximum performance a
 - **Deduplication:** Uses Redis to check if a URL has already been processed or queued.
 - **Rate Limiting:** Enforces per-domain rate limits (politeness) to avoid overwhelming target servers.
 - **Queueing:** Manages active queues and dispatches ready URLs to Kafka for fetching.
+- **Metrics:** Exposes a `/metrics` endpoint with Prometheus counters (`urls_ingested_total`, `urls_filtered_total`, `urls_deduped_total`).
 
 ### 2. Fetcher (Go)
 A highly concurrent worker service written in Go.
@@ -21,31 +22,45 @@ A highly concurrent worker service written in Go.
 - **Fast Fetching:** Downloads raw HTML rapidly.
 - **Dynamic Heuristic Engine:** Analyzes raw HTML snippets (e.g., empty `<div id="root">`, `__NEXT_DATA__`) to classify if a page is static or a dynamic SPA.
 - **Routing:** 
-  - *Static pages* are passed to the `fetched-pages` Kafka topic for extraction.
+  - *Static pages* are saved to MinIO, and their reference (`s3_key`) is passed to the `fetched-pages` Kafka topic for extraction.
   - *Dynamic pages* are passed to the Renderer.
+- **Metrics:** Exposes `/metrics` via `promhttp` with counters for URLs processed by status.
 
 ### 3. Renderer (Go)
 A specialized worker service designed to handle modern web apps.
 - **Headless Browsing:** Uses headless Chromium (via API/CDP) to navigate to dynamic URLs.
 - **Hydration:** Executes JavaScript and waits for the DOM to fully hydrate.
 - **Extraction:** Extracts the fully rendered `outerHTML` and pushes it into the `fetched-pages` pipeline.
+- **Metrics:** Exposes `/metrics` via `promhttp` with `renderer_pages_rendered_total` counter (by status: success, fetch_error, storage_error, produce_error).
 
 ### 4. Extractor (Zig)
 A high-throughput parsing service for analyzing raw HTML.
+- **Input:** Consumes S3 keys from the `fetched-pages` topic and retrieves the raw HTML from MinIO.
 - **Link Extraction:** Parses `href` attributes to discover new links and pushes them back to the Frontier.
 - **Text Cleaning:** Strips HTML tags, styles, and scripts to extract raw text content.
 - **Forwarding:** Publishes the cleaned content to the `cleaned_documents` Kafka topic.
+- **Metrics:** Runs a dedicated Prometheus HTTP server exposing `html_processed_total`, `urls_extracted_total`, and `documents_produced_total`.
 
 ### 5. Embedder (Python / Ray)
 The machine learning pipeline responsible for generating vector embeddings.
 - **Consumption:** Consumes from the `cleaned_documents` topic.
 - **Inference:** Uses `SentenceTransformers` (and Ray for scaling) to generate dense embeddings for each document.
 - **Storage:** Upserts the generated vectors and metadata directly into Qdrant.
+- **Metrics:** Exposes `/metrics` via `prometheus_client` with `embeddings_processed_total` counter by status.
 
 ### 6. Infrastructure
-- **Apache Kafka & Zookeeper:** The central event bus connecting all components (`urls`, `fetched-pages`, `cleaned_documents`).
+- **Apache Kafka & Zookeeper:** The central event bus connecting all components (`urls`, `fetched-pages`, `cleaned_documents`), with Dead Letter Queues (DLQ) for fault tolerance.
+- **MinIO:** S3-compatible object storage for efficiently storing large raw HTML payloads.
 - **Redis:** Used by the Frontier for state management and deduplication.
 - **Qdrant:** Destination vector database for semantic search.
+
+### 7. Observability
+- **Prometheus:** Collects metrics from all services and infrastructure components (9 scrape targets).
+- **Grafana:** Pre-provisioned with a Prometheus datasource and a **Photon Pipeline** dashboard covering the full system.
+- **Kafka Exporter:** Sidecar (`danielqsj/kafka-exporter`) exposing consumer group lag, topic offsets, and partition health.
+- **Redis Exporter:** Sidecar (`oliver006/redis_exporter`) exposing memory usage, connected clients, and key statistics.
+- **MinIO:** Native Prometheus metrics via `MINIO_PROMETHEUS_AUTH_TYPE=public`.
+- **Qdrant:** Native metrics exposed on port 6333 (`/metrics`).
 
 ## Prerequisites
 - **Go** >= 1.22
@@ -57,26 +72,74 @@ The machine learning pipeline responsible for generating vector embeddings.
 ## Getting Started
 
 ### Running the Infrastructure
-Start the entire 9-container infrastructure (Kafka, Redis, Qdrant, Frontier, Fetcher, Renderer, Extractor, Embedder) using Docker Compose:
+Start the entire infrastructure using Docker Compose:
 ```bash
 docker compose up --build
 ```
 
-*(Note: In production, configure each service by setting the respective environment variables found in the `.env` templates).*
-
-## Testing
-The repository includes unit tests across all services. 
-
-To run Zig tests (Frontier & Extractor):
+### Configuration
+Each service reads its configuration from environment variables. Copy `.env.example` to `.env` and adjust as needed:
 ```bash
-cd frontier && zig build test
-cd ../extractor && zig build test
+cp .env.example .env
 ```
 
-To run Python tests (Embedder):
+Key environment variables:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MINIO_ROOT_USER` | `minioadmin` | MinIO access key |
+| `MINIO_ROOT_PASSWORD` | `minioadmin` | MinIO secret key |
+| `PROMETHEUS_PORT` | `9090` | Prometheus host port |
+| `FETCHER_PROMETHEUS_PORT` | `2112` | Fetcher metrics port |
+| `EMBEDDER_PROMETHEUS_PORT` | `8000` | Embedder metrics port |
+| `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor metrics port |
+
+### Monitoring
+Once the stack is running:
+- **Grafana:** [http://localhost:3001](http://localhost:3001) (login: `admin` / `admin`)
+- **Prometheus:** [http://localhost:9090](http://localhost:9090)
+
+Grafana is pre-provisioned with the Prometheus datasource and a **Photon Pipeline** dashboard. No manual setup required.
+
+## Testing
+
+Run all tests across every service:
 ```bash
-cd embedder
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-pytest tests/
+make test
+```
+
+Or run tests individually:
+
+```bash
+# Zig tests (Frontier & Extractor)
+make test-frontier
+make test-extractor
+
+# Go tests (Fetcher & Renderer)
+make test-fetcher
+make test-renderer
+
+# Python tests (Embedder)
+make test-embedder
+```
+
+## Project Structure
+
+```
+photon/
+├── config/                     # Shared configuration files
+│   ├── prometheus.yml          # Prometheus scrape config (9 targets)
+│   └── grafana/                # Grafana provisioning
+│       ├── provisioning/
+│       │   ├── datasources/    # Auto-provision Prometheus datasource
+│       │   └── dashboards/     # Auto-provision dashboard provider
+│       └── dashboards/         # Dashboard JSON definitions
+├── frontier/                   # URL management service (Zig)
+├── fetcher/                    # HTML fetching service (Go)
+├── renderer/                   # Headless browser rendering (Go)
+├── extractor/                  # HTML parsing & text extraction (Zig)
+├── embedder/                   # ML embedding generation (Python/Ray)
+├── docs/                       # Per-component documentation
+├── docker-compose.yml          # Full stack orchestration
+├── makefile                    # Build, test, run, clean targets
+└── .env.example                # Environment variable template
 ```

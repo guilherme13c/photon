@@ -21,6 +21,8 @@ type Cfg struct {
 	KafkaProducerTopic string
 	KafkaDynamicUrlsTopic string
 	KafkaGroup         string
+	KafkaDlqTopic      string
+	PrometheusPort     string
 }
 
 ```

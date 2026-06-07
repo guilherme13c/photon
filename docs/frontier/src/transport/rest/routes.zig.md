@@ -27,6 +27,8 @@ pub fn handleRequest(req: *std.http.Server.Request, service: *Service, allocator
             return;
         }
         try methods.handleIngest(req, service, allocator);
+    } else if (std.mem.eql(u8, path, "/metrics")) {
+        try methods.handleMetrics(req, service, allocator);
     } else {
         try req.respond("Not Found", .{ .status = .not_found });
     }
