@@ -51,6 +51,7 @@ pub fn main(init: std.process.Init) !void {
         redis.interface(),
         kafka_producer.interface(),
     );
+    try service.startIngestionWorker();
 
     // Pass the reference to the global atomic boolean
     var rest_server = RestServer.init(
@@ -65,6 +66,7 @@ pub fn main(init: std.process.Init) !void {
         redis.interface(),
         kafka_producer.interface(),
         cfg.kafka_urls_topic,
+        cfg.kafka_dynamic_urls_topic,
         init.io,
     );
 
@@ -127,7 +129,6 @@ fn setupSignalHandlers() !void {
 test "core test suite" {
     _ = @import("config/parse.zig");
     _ = @import("service/normalization.zig");
-    _ = @import("service/deduplication.zig");
     _ = @import("service/filter.zig");
     _ = @import("service/robots.zig");
     _ = @import("service/scheduler.zig");

@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "topic": "urls",
+  "key": "example.test",
+  "value": "https://example.test/articles/one"
+}

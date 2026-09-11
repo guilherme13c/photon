@@ -110,7 +110,7 @@ pub const KafkaProducer = struct {
         _ = c.rd_kafka_poll(self.rk, 0);
     }
 
-    fn publishUrl(ctx: *anyopaque, topic_name: []const u8, url: []const u8) anyerror!void {
+    fn publishUrl(ctx: *anyopaque, topic_name: []const u8, key: []const u8, url: []const u8) anyerror!void {
         const self: *KafkaProducer = @ptrCast(@alignCast(ctx));
 
         var topic_buf: [256]u8 = undefined;
@@ -133,8 +133,8 @@ pub const KafkaProducer = struct {
             c.RD_KAFKA_MSG_F_COPY,
             @ptrCast(@constCast(url.ptr)),
             url.len,
-            null,
-            0,
+            @ptrCast(@constCast(key.ptr)),
+            key.len,
             null,
         );
 

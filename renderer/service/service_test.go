@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -20,12 +21,13 @@ func (m *mockClient) Fetch(ctx context.Context, url string) ([]byte, error) {
 
 type mockStorage struct {
 	savedDoc *storage.Document
+	s3Key    string
 	err      error
 }
 
-func (m *mockStorage) Save(ctx context.Context, doc storage.Document) error {
+func (m *mockStorage) Save(ctx context.Context, doc storage.Document) (string, error) {
 	m.savedDoc = &doc
-	return m.err
+	return m.s3Key, m.err
 }
 
 func (m *mockStorage) Close() error {
@@ -52,7 +54,7 @@ func (m *mockProducer) Close() error {
 
 func TestServiceProcess_Success(t *testing.T) {
 	client := &mockClient{content: []byte("<html>Hello</html>")}
-	store := &mockStorage{}
+	store := &mockStorage{s3Key: "rendered-example.html"}
 	prod := &mockProducer{}
 	producerTopic := "test-topic"
 
@@ -77,8 +79,15 @@ func TestServiceProcess_Success(t *testing.T) {
 	if string(prod.key) != "http://example.com" {
 		t.Errorf("expected producer key http://example.com, got %s", string(prod.key))
 	}
-	if string(prod.value) != "<html>Hello</html>" {
-		t.Errorf("expected producer value <html>Hello</html>, got %s", string(prod.value))
+	var payload struct {
+		URL   string `json:"url"`
+		S3Key string `json:"s3_key"`
+	}
+	if err := json.Unmarshal(prod.value, &payload); err != nil {
+		t.Fatalf("expected JSON storage-reference envelope, got %q: %v", prod.value, err)
+	}
+	if payload.URL != "http://example.com" || payload.S3Key != "rendered-example.html" {
+		t.Errorf("expected payload {url: http://example.com, s3_key: rendered-example.html}, got %+v", payload)
 	}
 }
 

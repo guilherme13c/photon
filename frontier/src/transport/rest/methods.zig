@@ -38,18 +38,29 @@ pub fn handleIngest(req: *std.http.Server.Request, pipeline: *Service, allocator
     };
     defer parsed.deinit();
 
-    try pipeline.processUrlBatch(parsed.value.urls);
+    const accepted = pipeline.enqueueUrlBatch(parsed.value.urls) catch |err| {
+        if (err == error.IngestionQueueFull) {
+            try req.respond("{\"error\":\"Ingestion queue is full\"}", .{ .status = .service_unavailable });
+            return;
+        }
+        return err;
+    };
 
-    try req.respond("{\"status\":\"ingested\"}", .{ .status = .ok });
+    const response = try std.fmt.allocPrint(allocator, "{{\"status\":\"accepted\",\"accepted\":{}}}", .{accepted});
+    defer allocator.free(response);
+    try req.respond(response, .{ .status = .ok });
 }
 
 pub fn handleMetrics(req: *std.http.Server.Request, service: *Service, allocator: std.mem.Allocator) !void {
     const ingested = service.urls_ingested_total.load(.monotonic);
     const filtered = service.urls_filtered_total.load(.monotonic);
     const deduped = service.urls_deduped_total.load(.monotonic);
+    const scheduled = service.urls_scheduled_total.load(.monotonic);
+    const pending = service.pending_urls_total.load(.monotonic);
+    const discovered_domains = service.discoveredDomainCount() catch 0;
 
     const metrics_format =
-        \\# HELP urls_ingested_total Total URLs ingested
+        \\# HELP urls_ingested_total Total URLs accepted for asynchronous ingestion
         \\# TYPE urls_ingested_total counter
         \\urls_ingested_total {}
         \\# HELP urls_filtered_total Total URLs filtered
@@ -58,13 +69,49 @@ pub fn handleMetrics(req: *std.http.Server.Request, service: *Service, allocator
         \\# HELP urls_deduped_total Total URLs deduped
         \\# TYPE urls_deduped_total counter
         \\urls_deduped_total {}
+        \\# HELP frontier_urls_scheduled_total Total URLs that passed robots and were scheduled for fetching
+        \\# TYPE frontier_urls_scheduled_total counter
+        \\frontier_urls_scheduled_total {}
+        \\# HELP frontier_pending_urls URLs awaiting a robots check in the Frontier worker queue
+        \\# TYPE frontier_pending_urls gauge
+        \\frontier_pending_urls {}
+        \\# HELP frontier_discovered_domains Unique domains accepted into the crawl frontier
+        \\# TYPE frontier_discovered_domains gauge
+        \\frontier_discovered_domains {}
         \\
     ;
-    const body = try std.fmt.allocPrint(allocator, metrics_format, .{ ingested, filtered, deduped });
+    const body = try std.fmt.allocPrint(allocator, metrics_format, .{ ingested, filtered, deduped, scheduled, pending, discovered_domains });
     defer allocator.free(body);
 
     try req.respond(body, .{
         .status = .ok,
         .extra_headers = &.{.{ .name = "content-type", .value = "text/plain; version=0.0.4" }},
     });
+}
+
+/// Bounded operational view for finding hosts that are accumulating work.
+/// This deliberately stays out of Prometheus labels, where host cardinality is
+/// unbounded in a crawler.
+pub fn handleTopHosts(req: *std.http.Server.Request, service: *Service, allocator: std.mem.Allocator, limit: usize) !void {
+    const hosts = try service.topHosts(allocator, limit);
+    defer {
+        for (hosts) |host| allocator.free(host.host);
+        allocator.free(hosts);
+    }
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(allocator);
+    try body.appendSlice(allocator, "{\"hosts\":[");
+    for (hosts, 0..) |host, index| {
+        if (index > 0) try body.append(allocator, ',');
+        const json_host = try std.json.Stringify.valueAlloc(allocator, host.host, .{});
+        defer allocator.free(json_host);
+        const entry = try std.fmt.allocPrint(allocator,
+            "{{\"host\":{s},\"queue_depth\":{},\"next_allowed_at_ms\":{},\"crawl_delay_ms\":{},\"scheduled_total\":{},\"dispatched_total\":{}}}",
+            .{ json_host, host.queue_depth, host.next_allowed_at_ms, host.crawl_delay_ms, host.scheduled_total, host.dispatched_total },
+        );
+        defer allocator.free(entry);
+        try body.appendSlice(allocator, entry);
+    }
+    try body.appendSlice(allocator, "]}");
+    try req.respond(body.items, .{ .status = .ok, .extra_headers = &.{.{ .name = "content-type", .value = "application/json" }} });
 }

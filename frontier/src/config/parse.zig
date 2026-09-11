@@ -34,6 +34,10 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
         config.kafka_urls_topic = try allocator.dupe(u8, std.mem.span(val));
     }
 
+    if (std.c.getenv("KAFKA_DYNAMIC_URLS_TOPIC")) |val| {
+        config.kafka_dynamic_urls_topic = try allocator.dupe(u8, std.mem.span(val));
+    }
+
     var file = std.Io.Dir.cwd().openFile(
         io,
         path,
@@ -101,6 +105,8 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
             config.kafka_dlq_topic = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_URLS_TOPIC")) {
             config.kafka_urls_topic = try allocator.dupe(u8, val);
+        } else if (std.mem.eql(u8, key, "KAFKA_DYNAMIC_URLS_TOPIC")) {
+            config.kafka_dynamic_urls_topic = try allocator.dupe(u8, val);
         }
     }
 

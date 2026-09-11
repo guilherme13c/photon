@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "topic": "frontier-ingest",
+  "key": "example.test",
+  "value": "render:https://example.test/application"
+}

@@ -1,0 +1,5 @@
+{
+  "topic": "fetched-pages",
+  "key": "https://example.test/article",
+  "value": {"url": "https://example.test/article"}
+}

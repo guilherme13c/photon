@@ -26,8 +26,9 @@ pub const MockKafkaProducer = struct {
         self.dead_letters += 1;
     }
 
-    fn publishUrl(ctx: *anyopaque, topic: []const u8, url: []const u8) anyerror!void {
+    fn publishUrl(ctx: *anyopaque, topic: []const u8, key: []const u8, url: []const u8) anyerror!void {
         _ = topic;
+        _ = key;
         _ = url;
         const self: *MockKafkaProducer = @ptrCast(@alignCast(ctx));
         self.published_urls += 1;

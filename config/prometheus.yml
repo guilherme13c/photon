@@ -2,6 +2,10 @@ global:
   scrape_interval: 5s
 
 scrape_configs:
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
   - job_name: 'fetcher'
     dns_sd_configs:
       - names:
@@ -32,6 +36,14 @@ scrape_configs:
 
   - job_name: 'minio'
     metrics_path: /minio/v2/metrics/cluster
+    dns_sd_configs:
+      - names:
+          - 'minio'
+        type: 'A'
+        port: 9000
+
+  - job_name: 'minio-bucket'
+    metrics_path: /minio/v2/metrics/bucket
     dns_sd_configs:
       - names:
           - 'minio'

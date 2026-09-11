@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 
 	"github.com/guilherme13c/renderer/repository/headless_client"
@@ -35,7 +36,6 @@ func NewService(client headless_client.Client, st storage.Storage, pr producer.P
 	}
 }
 
-
 func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	url := string(msg.Value)
 	log.Printf("Fetching URL: %s", url)
@@ -53,22 +53,32 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 		URL:     url,
 		Content: string(content),
 	}
-	if err := s.storage.Save(ctx, doc); err != nil {
+	s3Key, err := s.storage.Save(ctx, doc)
+	if err != nil {
 		log.Printf("Failed to save doc %s: %v", url, err)
 		pagesRenderedTotal.WithLabelValues("storage_error").Inc()
 		return
 	}
 
-	// 3. Produce to Kafka for the parser service
-	// We pass the URL as the key and content as the value
-	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), content); err != nil {
+	// 3. Produce the same storage reference envelope consumed by the extractor.
+	payload, err := json.Marshal(struct {
+		URL   string `json:"url"`
+		S3Key string `json:"s3_key"`
+	}{
+		URL:   url,
+		S3Key: s3Key,
+	})
+	if err != nil {
+		log.Printf("Failed to marshal message for %s: %v", url, err)
+		pagesRenderedTotal.WithLabelValues("produce_error").Inc()
+		return
+	}
+	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), payload); err != nil {
 		log.Printf("Failed to produce message for %s: %v", url, err)
 		pagesRenderedTotal.WithLabelValues("produce_error").Inc()
 		return
 	}
 
-
 	log.Printf("Successfully processed %s", url)
 	pagesRenderedTotal.WithLabelValues("success").Inc()
 }
-

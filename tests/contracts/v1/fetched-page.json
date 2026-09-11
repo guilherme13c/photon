@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "topic": "fetched-pages",
+  "key": "https://example.test/articles/one",
+  "value": {
+    "url": "https://example.test/articles/one",
+    "s3_key": "pages/example.test/articles/one.html"
+  }
+}

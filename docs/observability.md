@@ -26,10 +26,10 @@ Prometheus is configured with 9 scrape targets covering the full pipeline:
 | Service | Language | Port | Endpoint | Metrics |
 |---------|----------|------|----------|---------|
 | Frontier | Zig | 8080 | `/metrics` | `urls_ingested_total`, `urls_filtered_total`, `urls_deduped_total` |
-| Fetcher | Go | 2112 | `/metrics` | `urls_processed_total{status}` |
+| Fetcher | Go | 2112 | `/metrics` | `fetcher_urls_processed_total{status}` |
 | Renderer | Go | 3000 | `/metrics` | `renderer_pages_rendered_total{status}` |
 | Extractor | Zig | 8001 | `/metrics` | `html_processed_total`, `urls_extracted_total`, `documents_produced_total` |
-| Embedder | Python | 8000 | `/metrics` | `embeddings_processed_total{status}` |
+| Embedder | Python | 8000 | `/metrics` | `embedder_messages_processed_total{status}` |
 
 ### Infrastructure
 
@@ -81,9 +81,9 @@ The **Photon Pipeline** dashboard includes:
 
 ### Pipeline Throughput (Row 2)
 - Frontier Ingestion Rate — `rate(urls_ingested_total[1m])`, `rate(urls_filtered_total[1m])`, `rate(urls_deduped_total[1m])`
-- Fetcher & Renderer Rate — `rate(urls_processed_total{status="success"}[1m])`, `rate(renderer_pages_rendered_total{status="success"}[1m])`
+- Fetcher & Renderer Rate — `rate(fetcher_urls_processed_total{status="success"}[1m])`, `rate(renderer_pages_rendered_total{status="success"}[1m])`
 - Extractor & Embedder Rate — `rate(html_processed_total[1m])`, `rate(documents_produced_total[1m])`
-- Embeddings Rate — `rate(embeddings_processed_total[1m])` by status
+- Embeddings Rate — `rate(embedder_messages_processed_total[1m])` by status
 
 ### Infrastructure (Row 3)
 - Kafka Consumer Group Lag — `kafka_consumergroup_lag`

@@ -1,4 +1,4 @@
-.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder
+.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder
 
 build: build-frontier build-extractor build-fetcher build-renderer
 
@@ -32,6 +32,35 @@ run-embedder:
 	cd embedder && . ../.venv/bin/activate && PYTHONPATH=. python -m src.main
 
 test: test-frontier test-extractor test-fetcher test-renderer test-embedder
+
+# The PR-fast gate contains no Docker or public-network dependency.
+test-fast: test test-contracts test-simulation test-fuzz
+
+test-contracts:
+	python3 scripts/verify-contracts.py
+
+test-simulation:
+	python3 tests/simulation/test_scheduler.py
+
+test-fuzz:
+	cd fetcher && go test -run=^$$ -fuzz=Fuzz -fuzztime=5s ./service
+	cd renderer && go test -run=^$$ -fuzz=Fuzz -fuzztime=5s ./service
+
+test-integration:
+	cd fetcher && go test ./tests -v
+	cd renderer && go test ./tests -v
+
+test-functional:
+	bash scripts/test-functional.sh
+
+test-performance:
+	python3 scripts/run-performance.py
+
+test-capacity:
+	python3 scripts/run-capacity.py
+
+test-chaos:
+	bash scripts/run-chaos.sh
 
 test-frontier:
 	cd frontier && zig build test --summary all

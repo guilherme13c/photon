@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,11 +13,21 @@ import (
 	"github.com/guilherme13c/fetcher/repository/kafka/producer"
 	"github.com/guilherme13c/fetcher/repository/storage"
 	"github.com/guilherme13c/fetcher/service"
+	kafkalib "github.com/segmentio/kafka-go"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/kafka"
-	kafkalib "github.com/segmentio/kafka-go"
 )
 
+type testStorage struct {
+	savedDocument storage.Document
+}
+
+func (s *testStorage) Save(_ context.Context, doc storage.Document) (string, error) {
+	s.savedDocument = doc
+	return "e2e-fetched-page.html", nil
+}
+
+func (s *testStorage) Close() error { return nil }
 
 func TestFetcherE2E(t *testing.T) {
 	if testing.Short() {
@@ -59,8 +70,7 @@ func TestFetcherE2E(t *testing.T) {
 	defer p.Close()
 
 	hClient := http_client.NewClient()
-	st := storage.NewStorage()
-	defer st.Close()
+	st := &testStorage{}
 
 	svc := service.NewService(hClient, st, p, outputTopic, "e2e-dynamic-urls", "e2e-fetcher-dlq")
 
@@ -74,11 +84,16 @@ func TestFetcherE2E(t *testing.T) {
 			case <-ctxCancel.Done():
 				return
 			default:
-				msg, err := c.Consume(ctxCancel)
+				msg, err := c.Fetch(ctxCancel)
 				if err != nil {
 					continue
 				}
-				svc.Process(ctxCancel, msg)
+				if err := svc.Process(ctxCancel, msg); err != nil {
+					continue
+				}
+				if err := c.Commit(ctxCancel, msg); err != nil {
+					continue
+				}
 			}
 		}
 	}()
@@ -115,7 +130,6 @@ func TestFetcherE2E(t *testing.T) {
 	})
 	defer reader.Close()
 
-
 	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelTimeout()
 
@@ -127,9 +141,17 @@ func TestFetcherE2E(t *testing.T) {
 	if string(msg.Key) != mockServer.URL {
 		t.Errorf("expected key %s, got %s", mockServer.URL, string(msg.Key))
 	}
-	if string(msg.Value) != "<html><body>E2E Test Content</body></html>" {
-		t.Errorf("expected body '<html><body>E2E Test Content</body></html>', got %s", string(msg.Value))
+	var payload struct {
+		URL   string `json:"url"`
+		S3Key string `json:"s3_key"`
+	}
+	if err := json.Unmarshal(msg.Value, &payload); err != nil {
+		t.Fatalf("expected storage-reference JSON envelope, got %q: %v", msg.Value, err)
+	}
+	if payload.URL != mockServer.URL || payload.S3Key != "e2e-fetched-page.html" {
+		t.Errorf("unexpected payload: %+v", payload)
+	}
+	if st.savedDocument.URL != mockServer.URL || st.savedDocument.Content != "<html><body>E2E Test Content</body></html>" {
+		t.Errorf("document was not stored before publish: %+v", st.savedDocument)
 	}
 }
-
-

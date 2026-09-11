@@ -8,4 +8,5 @@ pub const Cfg = struct {
     kafka_ingest_topic: []const u8 = "frontier-ingest",
     kafka_dlq_topic: []const u8 = "frontier-dlq",
     kafka_urls_topic: []const u8 = "urls",
+    kafka_dynamic_urls_topic: []const u8 = "dynamic-urls",
 };

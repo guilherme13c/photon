@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/guilherme13c/fetcher/config"
 	"github.com/guilherme13c/fetcher/repository/http_client"
@@ -50,25 +51,41 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Each Kafka partition is processed in order. This matters because Kafka
+	// commits are cumulative per partition: committing a later offset would also
+	// acknowledge every earlier offset. Different partitions can still fetch in
+	// parallel, bounded by MAX_ROUTINES.
 	sem := make(chan struct{}, cfg.MaxRoutines)
-
+	completed := make(chan consumer.Message, cfg.MaxRoutines)
+	go commitLoop(ctx, kafkaConsumer, completed)
 	go func() {
+		workers := make(map[int]chan consumer.Message)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				msg, err := kafkaConsumer.Consume(ctx)
+				msg, err := kafkaConsumer.Fetch(ctx)
 				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
 					log.Printf("consumer error: %v", err)
 					continue
 				}
 
-				sem <- struct{}{} // Block if limit reached
-				go func(m consumer.Message) {
-					defer func() { <-sem }() // Release semaphore
-					svc.Process(ctx, m)
-				}(msg)
+				worker, ok := workers[msg.Partition]
+				if !ok {
+					worker = make(chan consumer.Message, 1)
+					workers[msg.Partition] = worker
+					go processPartition(ctx, svc, worker, sem, completed)
+				}
+
+				select {
+				case worker <- msg:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
@@ -77,4 +94,58 @@ func main() {
 	<-sigChan
 	log.Println("Shutting down gracefully...")
 	cancel()
+}
+
+func processPartition(ctx context.Context, svc *service.Service, messages <-chan consumer.Message, sem chan struct{}, completed chan<- consumer.Message) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-messages:
+			for {
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				err := svc.Process(ctx, msg)
+				<-sem
+				if err == nil {
+					select {
+					case completed <- msg:
+					case <-ctx.Done():
+					}
+					break
+				}
+				log.Printf("processing partition %d offset %d failed: %v; retrying", msg.Partition, msg.Offset, err)
+				select {
+				case <-time.After(time.Second):
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+}
+
+func commitLoop(ctx context.Context, kafkaConsumer consumer.Consumer, completed <-chan consumer.Message) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-completed:
+			for {
+				if err := kafkaConsumer.Commit(ctx, msg); err == nil {
+					break
+				} else {
+					log.Printf("commit partition %d offset %d failed: %v; retrying", msg.Partition, msg.Offset, err)
+				}
+				select {
+				case <-time.After(time.Second):
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
 }

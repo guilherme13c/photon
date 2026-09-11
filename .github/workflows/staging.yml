@@ -1,0 +1,39 @@
+name: Photon staging resilience and performance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 2 * * 1'
+
+jobs:
+  staging:
+    # This label intentionally requires a disposable, pre-provisioned staging
+    # runner. It must never target a developer or production Compose project.
+    runs-on: [self-hosted, photon-disposable-staging]
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report-only public snapshot performance
+        env:
+          PHOTON_ALLOW_PUBLIC_PERFORMANCE: '1'
+          PHOTON_FRONTIER_URL: ${{ vars.PHOTON_FRONTIER_URL }}
+        run: make test-performance
+      - name: Controlled-origin chaos recovery
+        env:
+          PHOTON_ALLOW_CHAOS: '1'
+        run: make test-chaos
+      - name: Report-only controlled-origin capacity profiles
+        env:
+          PHOTON_FRONTIER_URL: ${{ vars.PHOTON_FRONTIER_URL }}
+          PHOTON_CAPACITY_ORIGIN: ${{ vars.PHOTON_CAPACITY_ORIGIN }}
+        run: |
+          for mode in load spike stress volume; do
+            PHOTON_CAPACITY_MODE="$mode" make test-capacity
+          done
+      - name: Upload staging reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-artifacts
+          path: artifacts/
+          if-no-files-found: ignore

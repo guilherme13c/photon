@@ -1,4 +1,8 @@
-# Photon Pipeline Architecture
+# Photon pipeline overview
+
+> **Canonical design:** [Architecture](architecture.md) is the authoritative
+> description of crawler safety, Kafka contracts, consistency guarantees, and
+> known limitations. This page is a stage-by-stage overview.
 
 This document describes the complete distributed pipeline for the Photon web crawler and embeddings generator.
 
@@ -14,7 +18,7 @@ The pipeline is structured into multiple decoupled tiers:
 The `frontier` is the central coordinator for URL management, built for extreme throughput and low latency.
 - **Ingestion:** Receives new URLs through a REST API (`/ingest`).
 - **Deduplication:** Utilizes Redis to track visited URLs to avoid redundant crawling.
-- **Rate Limiting (Politeness):** Ensures target servers are not overwhelmed by rate-limiting requests per domain.
+- **Rate Limiting (Politeness):** Uses Redis-backed, atomic per-host request-slot reservations and cached robots policy. See [Architecture](architecture.md#politeness).
 - **Dispatching:** Pushes clean, ready-to-crawl URLs to the Kafka `urls` topic.
 - **Metrics:** Exposes a `/metrics` endpoint (on the same REST port) with Prometheus-formatted counters: `urls_ingested_total`, `urls_filtered_total`, `urls_deduped_total`.
 
@@ -25,8 +29,8 @@ The `fetcher` is a highly concurrent service responsible for downloading the HTM
 - **Dynamic Heuristic Engine:** Analyzes raw HTML snippets (e.g., `<div id="root">`, `__NEXT_DATA__`) to determine if the page requires JavaScript execution.
 - **Routing:**
   - *Static pages:* The HTML is saved to MinIO, and a payload containing `s3_key` is published to the `fetched-pages` topic.
-  - *Dynamic pages:* The URL is sent to the `dynamic-urls` Kafka topic.
-- **Metrics:** Exposes `/metrics` via `promhttp` (configurable port via `PROMETHEUS_PORT`, default `2112`) with `urls_processed_total` counter by status.
+  - *Dynamic pages:* The URL returns to `frontier-ingest` as `render:<url>` so the Renderer receives a second polite host slot through `dynamic-urls`.
+- **Metrics:** Exposes `/metrics` via `promhttp` (configurable port via `PROMETHEUS_PORT`, default `2112`) with `fetcher_urls_processed_total` counter by status.
 
 ### 3. Rendering Modern Web Apps (Go)
 The `renderer` specifically targets Single Page Applications (SPAs) and heavy JavaScript pages.
@@ -34,13 +38,13 @@ The `renderer` specifically targets Single Page Applications (SPAs) and heavy Ja
 - **Consumption:** Listens to the `dynamic-urls` topic.
 - **Headless Execution:** Utilizes `chromedp` to run headless Chromium instances with stability flags (`--no-sandbox`, `--disable-dev-shm-usage`, etc.).
 - **Hydration:** Waits for network idleness and DOM stability before extracting the rendered `outerHTML`.
-- **Forwarding:** Pushes the fully hydrated HTML back into the pipeline.
+- **Forwarding:** Stores hydrated HTML in MinIO, then publishes the same `{url,s3_key}` envelope used for static pages.
 - **Metrics:** Exposes `/metrics` via `promhttp` with `renderer_pages_rendered_total` counter (labels: `success`, `fetch_error`, `storage_error`, `produce_error`).
 
 ### 4. Parsing & Link Extraction (Zig)
 The `extractor` (Tier 1 Parser) processes the raw HTML coming from the Fetcher and Renderer.
 - **Input:** Consumes JSON payloads from the `fetched-pages` topic and retrieves the corresponding raw HTML from MinIO using the provided `s3_key`.
-- **Link Extraction:** Parses `href` attributes and pushes new discovered URLs back to the `frontier`'s `urls` topic.
+- **Link Extraction:** Parses `href` attributes and publishes discovered links to its configured URL topic. The default `urls` topic bypasses Frontier admission; see the [feedback-loop limitation](architecture.md#current-feedback-loop-limitation) before enabling recrawl.
 - **Text Cleaning:** Strips HTML tags, styles, and scripts to extract clean text.
 - **Forwarding:** Publishes cleaned documents and metadata to the `cleaned_documents` topic.
 - **Metrics:** Runs a dedicated HTTP server (configurable port via `PROMETHEUS_PORT`, default `8001`) exposing `html_processed_total`, `urls_extracted_total`, and `documents_produced_total`.
@@ -54,18 +58,19 @@ The final stage (Tier 3 ML Batch Processor) handles machine learning inference.
 - **Vectorization:** Runs dense embedding models (e.g., Sentence Transformers, ONNX Runtime) to convert text into vector embeddings.
 - **Storage:** Upserts the generated vectors and associated metadata directly into a Vector Database (like **Qdrant**).
 - **Execution Modes:** Architected to run on Ray for dynamic scale-out across multiple GPUs or machines depending on the inference load (`NUM_WORKERS > 1`). For environments that heavily rely on central Prometheus scraping, running in single-threaded mode (`NUM_WORKERS=1`) ensures accurate metrics collection by running the worker loop synchronously in the main thread rather than delegating it to Ray child processes.
-- **Metrics:** Exposes `/metrics` via `prometheus_client` (configurable port via `PROMETHEUS_PORT`, default `8000`) with `embeddings_processed_total` counter by status.
+- **Metrics:** Exposes `/metrics` via `prometheus_client` (configurable port via `PROMETHEUS_PORT`, default `8000`) with `embedder_messages_processed_total` counter by status.
 
 ## Data Flow Diagram
 
 ```mermaid
 graph TD
     User([User API Request]) --> |/ingest| Frontier
-    Extractor --> |Extracted Links| Frontier
+    Extractor --> |Discovered links; configure frontier-ingest for safe recrawl| Frontier
     
     Frontier --> |urls| Fetcher
     
-    Fetcher --> |Is SPA?| Renderer[Renderer / Headless]
+    Fetcher --> |Dynamic URL via frontier-ingest| Frontier
+    Frontier --> |dynamic-urls| Renderer[Renderer / Headless]
     Fetcher --> |Static HTML| Extractor
     
     Renderer --> |Rendered HTML| Extractor

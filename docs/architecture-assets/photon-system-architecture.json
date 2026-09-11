@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Photon System Architecture",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/guilherme13c/photon.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "c25a8e3726a80fd202159d8297f479604ae18ec8"
+    },
+    "viewBox": [1390, 820]
+  },
+  "components": [
+    { "id": "client", "type": "external", "label": "URL Producers", "sublabel": "Crawler clients", "pos": [50, 250], "size": [125, 70], "sources": [{ "path": "README.md", "line": 11, "label": "ingestion API" }] },
+    { "id": "frontier", "type": "backend", "label": "Frontier", "sublabel": "Zig coordinator", "pos": [225, 250], "size": [135, 70], "sources": [{ "path": "frontier/src/main.zig", "line": 1, "label": "service entrypoint" }] },
+    { "id": "kafka", "type": "messagebus", "label": "Apache Kafka", "sublabel": "Pipeline topics", "pos": [420, 250], "size": [145, 70], "sources": [{ "path": "docker-compose.yml", "line": 35, "label": "topic initialization" }] },
+    { "id": "workers", "type": "backend", "label": "Fetch & Render Workers", "sublabel": "Go · static pages and SPAs", "pos": [625, 250], "size": [180, 70], "sources": [{ "path": "fetcher/main.go", "line": 1, "label": "fetcher entrypoint" }, { "path": "renderer/main.go", "line": 1, "label": "renderer entrypoint" }] },
+    { "id": "extractor", "type": "backend", "label": "Extractor", "sublabel": "Zig · links and clean text", "pos": [865, 250], "size": [150, 70], "sources": [{ "path": "extractor/src/main.zig", "line": 1, "label": "service entrypoint" }] },
+    { "id": "embedder", "type": "backend", "label": "Embedder", "sublabel": "Python/Ray vectors", "pos": [1075, 250], "size": [145, 70], "sources": [{ "path": "embedder/src/main.py", "line": 1, "label": "service entrypoint" }] },
+    { "id": "qdrant", "type": "database", "label": "Qdrant", "sublabel": "Document vectors", "pos": [1260, 250], "size": [110, 70], "sources": [{ "path": "docker-compose.yml", "line": 98, "label": "Qdrant service" }] },
+    { "id": "redis", "type": "database", "label": "Redis", "sublabel": "Deduplication and politeness", "pos": [207.5, 440], "size": [170, 70], "sources": [{ "path": "docker-compose.yml", "line": 105, "label": "Redis service" }] },
+    { "id": "minio", "type": "cloud", "label": "MinIO", "sublabel": "Raw HTML objects", "pos": [635, 440], "size": [160, 70], "sources": [{ "path": "docker-compose.yml", "line": 49, "label": "MinIO service" }] },
+    { "id": "prometheus", "type": "cloud", "label": "Prometheus", "sublabel": "Metrics scraping", "pos": [620, 630], "size": [160, 70], "sources": [{ "path": "config/prometheus.yml", "line": 1, "label": "scrape configuration" }] },
+    { "id": "grafana", "type": "frontend", "label": "Grafana", "sublabel": "Photon Pipeline dashboard", "pos": [860, 630], "size": [180, 70], "sources": [{ "path": "docker-compose.yml", "line": 173, "label": "Grafana service" }] }
+  ],
+  "connections": [
+    { "from": "client", "to": "frontier", "label": "POST /ingest", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [200, 334] },
+    { "from": "frontier", "to": "kafka", "label": "publish urls", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [390, 334] },
+    { "from": "kafka", "to": "workers", "label": "urls / dynamic-urls", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [595, 334] },
+    { "from": "workers", "to": "extractor", "label": "fetched-pages", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [835, 334] },
+    { "from": "extractor", "to": "embedder", "label": "cleaned_documents", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [1045, 334] },
+    { "from": "embedder", "to": "qdrant", "label": "upsert vectors", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [1250, 334] },
+    { "from": "frontier", "to": "redis", "label": "URL state", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelAt": [350, 380] },
+    { "from": "workers", "to": "minio", "label": "store HTML", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelAt": [765, 380] },
+    { "from": "minio", "to": "extractor", "label": "retrieve HTML", "fromSide": "right", "toSide": "bottom", "route": "auto" },
+    { "from": "prometheus", "to": "grafana", "label": "query metrics", "fromSide": "right", "toSide": "left", "route": "straight" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Event-driven pipeline", "items": ["Kafka decouples URL dispatch, fetching, extraction, and embedding.", "The worker tier routes JavaScript-heavy pages through the headless renderer."] },
+    { "dot": "emerald", "title": "State and payloads", "items": ["Redis holds crawler deduplication and politeness state.", "MinIO keeps large raw HTML payloads outside Kafka messages."] },
+    { "dot": "violet", "title": "Observability", "items": ["Prometheus scrapes services and infrastructure.", "Grafana provides the pre-provisioned Photon Pipeline dashboard."] }
+  ]
+}

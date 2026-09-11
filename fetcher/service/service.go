@@ -42,7 +42,9 @@ func NewService(client http_client.Client, st storage.Storage, pr producer.Produ
 	}
 }
 
-func (s *Service) Process(ctx context.Context, msg consumer.Message) {
+// Process returns an error only when the input has not reached a durable next
+// state. Callers must not commit the Kafka offset in that case.
+func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 	url := string(msg.Value)
 	log.Printf("Fetching URL: %s", url)
 
@@ -53,8 +55,9 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 		log.Printf("Failed to fetch %s: %v, sending to DLQ...", url, err)
 		if dlqErr := s.producer.Produce(ctx, s.dlqTopic, []byte(url), []byte(err.Error())); dlqErr != nil {
 			log.Printf("Failed to send %s to DLQ: %v", url, dlqErr)
+			return fmt.Errorf("publish fetch failure to DLQ: %w", dlqErr)
 		}
-		return
+		return nil
 	}
 
 	contentStr := string(content)
@@ -63,10 +66,13 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	if s.isDynamic(contentStr) {
 		urlsProcessed.WithLabelValues("dynamic").Inc()
 		log.Printf("URL %s classified as dynamic, routing to renderer...", url)
-		if err := s.producer.Produce(ctx, s.dynamicTopic, []byte(url), []byte(url)); err != nil {
+		// Rendering is a second request to this host. Send it back through the
+		// frontier so it receives another shared politeness slot.
+		if err := s.producer.Produce(ctx, s.dynamicTopic, []byte(url), []byte("render:"+url)); err != nil {
 			log.Printf("Failed to produce to dynamic topic for %s: %v", url, err)
+			return fmt.Errorf("publish dynamic URL: %w", err)
 		}
-		return
+		return nil
 	}
 
 	// 3. Save to Storage (Static)
@@ -78,7 +84,7 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	if err != nil {
 		urlsProcessed.WithLabelValues("storage_error").Inc()
 		log.Printf("Failed to save doc %s: %v", url, err)
-		return
+		return fmt.Errorf("save document: %w", err)
 	}
 
 	// 4. Produce to Kafka for the parser service
@@ -86,11 +92,12 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), []byte(payload)); err != nil {
 		urlsProcessed.WithLabelValues("kafka_error").Inc()
 		log.Printf("Failed to produce message for %s: %v", url, err)
-		return
+		return fmt.Errorf("publish fetched page: %w", err)
 	}
 
 	urlsProcessed.WithLabelValues("success").Inc()
 	log.Printf("Successfully processed %s", url)
+	return nil
 }
 
 func (s *Service) isDynamic(html string) bool {
@@ -104,4 +111,3 @@ func (s *Service) isDynamic(html string) bool {
 	}
 	return false
 }
-

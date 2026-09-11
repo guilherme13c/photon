@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "purpose": "staging-only representative crawl performance sample",
+  "source": "Manually vetted public documentation and reserved-domain endpoints",
+  "license_review": "Each URL must be reviewed before addition; this file is not a permission to exceed robots.txt or site terms.",
+  "refreshed_at": "2026-09-11",
+  "global_concurrency": 2,
+  "per_host_concurrency": 1,
+  "user_agent": "frontier-bot",
+  "urls": [
+    "https://example.com/",
+    "https://www.iana.org/domains/reserved"
+  ]
+}

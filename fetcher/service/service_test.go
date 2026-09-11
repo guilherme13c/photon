@@ -104,3 +104,22 @@ func TestServiceProcess_FetchError(t *testing.T) {
 		t.Errorf("expected dlq message to be fetch error, got %s", string(prod.value))
 	}
 }
+
+func TestServiceProcess_DynamicPageReturnsToFrontierScheduler(t *testing.T) {
+	client := &mockClient{content: []byte(`<div id="root"></div>`)}
+	store := &mockStorage{}
+	prod := &mockProducer{}
+	svc := NewService(client, store, prod, "fetched-pages", "frontier-ingest", "fetcher-dlq")
+
+	svc.Process(context.Background(), consumer.Message{Value: []byte("http://example.com/app")})
+
+	if store.savedDoc != nil {
+		t.Fatal("dynamic page should not be stored by the fetcher")
+	}
+	if prod.topic != "frontier-ingest" {
+		t.Fatalf("expected dynamic request to return to the frontier, got topic %q", prod.topic)
+	}
+	if got, want := string(prod.value), "render:http://example.com/app"; got != want {
+		t.Errorf("expected scheduled render marker %q, got %q", want, got)
+	}
+}

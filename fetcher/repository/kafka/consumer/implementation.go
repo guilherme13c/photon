@@ -24,16 +24,25 @@ func NewConsumer(broker, topic, groupID string) Consumer {
 	}
 }
 
-func (c *consumerImpl) Consume(ctx context.Context) (Message, error) {
-	msg, err := c.reader.ReadMessage(ctx)
+func (c *consumerImpl) Fetch(ctx context.Context) (Message, error) {
+	msg, err := c.reader.FetchMessage(ctx)
 	if err != nil {
 		return Message{}, err
 	}
 	return Message{
-		Key:   msg.Key,
-		Value: msg.Value,
+		Key:       msg.Key,
+		Value:     msg.Value,
+		Partition: msg.Partition,
+		Offset:    msg.Offset,
 	}, nil
+}
 
+func (c *consumerImpl) Commit(ctx context.Context, msg Message) error {
+	return c.reader.CommitMessages(ctx, kafka.Message{
+		Topic:     c.reader.Config().Topic,
+		Partition: msg.Partition,
+		Offset:    msg.Offset,
+	})
 }
 
 func (c *consumerImpl) Close() error {

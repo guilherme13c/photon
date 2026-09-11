@@ -3,12 +3,14 @@ package consumer
 import "context"
 
 type Consumer interface {
-	Consume(ctx context.Context) (Message, error)
+	Fetch(ctx context.Context) (Message, error)
+	Commit(ctx context.Context, msg Message) error
 	Close() error
 }
 
 type Message struct {
-	Key   []byte
-	Value []byte
+	Key       []byte
+	Value     []byte
+	Partition int
+	Offset    int64
 }
-

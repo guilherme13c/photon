@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "topic": "fetcher-dlq",
+  "key": "https://example.test/unavailable",
+  "value": "upstream returned 503"
+}

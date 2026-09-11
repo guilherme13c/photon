@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "topic": "cleaned_documents",
+  "key": "https://example.test/articles/one",
+  "value": {
+    "url": "https://example.test/articles/one",
+    "title": "One",
+    "text": "Example document body.",
+    "s3_key": "pages/example.test/articles/one.html"
+  }
+}

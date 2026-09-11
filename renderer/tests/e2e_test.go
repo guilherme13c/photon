@@ -2,21 +2,37 @@ package tests
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
+	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/guilherme13c/renderer/repository/headless_client"
 	"github.com/guilherme13c/renderer/repository/kafka/consumer"
 	"github.com/guilherme13c/renderer/repository/kafka/producer"
 	"github.com/guilherme13c/renderer/repository/storage"
 	"github.com/guilherme13c/renderer/service"
+	kafkalib "github.com/segmentio/kafka-go"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/kafka"
-	kafkalib "github.com/segmentio/kafka-go"
 )
 
+type testStorage struct {
+	savedDocument storage.Document
+}
+
+type testHeadlessClient struct{}
+
+func (testHeadlessClient) Fetch(_ context.Context, _ string) ([]byte, error) {
+	return []byte("<html><body>E2E Test Content</body></html>"), nil
+}
+
+func (s *testStorage) Save(ctx context.Context, doc storage.Document) (string, error) {
+	s.savedDocument = doc
+	return "e2e-rendered-page.html", nil
+}
+
+func (s *testStorage) Close() error {
+	return nil
+}
 
 func TestFetcherE2E(t *testing.T) {
 	if testing.Short() {
@@ -44,12 +60,7 @@ func TestFetcherE2E(t *testing.T) {
 	inputTopic := "e2e-urls"
 	outputTopic := "e2e-fetched-pages"
 
-	// 2. Start a mock HTTP server to act as the target website
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("<html><body>E2E Test Content</body></html>"))
-	}))
-	defer mockServer.Close()
+	const fixtureURL = "http://fixture.test/dynamic"
 
 	// 3. Initialize Fetcher components
 	c := consumer.NewConsumer(broker, inputTopic, "fetcher-group")
@@ -58,9 +69,8 @@ func TestFetcherE2E(t *testing.T) {
 	p := producer.NewProducer(broker)
 	defer p.Close()
 
-	hClient := headless_client.NewClient()
-	st := storage.NewStorage()
-	defer st.Close()
+	hClient := testHeadlessClient{}
+	st := &testStorage{}
 
 	svc := service.NewService(hClient, st, p, outputTopic)
 
@@ -91,7 +101,7 @@ func TestFetcherE2E(t *testing.T) {
 	var errProduce error
 	for i := 0; i < 5; i++ {
 		time.Sleep(2 * time.Second) // wait for topics/consumer to settle
-		errProduce = testProducer.Produce(ctx, inputTopic, []byte("key"), []byte(mockServer.URL))
+		errProduce = testProducer.Produce(ctx, inputTopic, []byte("key"), []byte(fixtureURL))
 		if errProduce == nil {
 			break
 		}
@@ -115,7 +125,6 @@ func TestFetcherE2E(t *testing.T) {
 	})
 	defer reader.Close()
 
-
 	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 15*time.Second)
 	defer cancelTimeout()
 
@@ -124,12 +133,20 @@ func TestFetcherE2E(t *testing.T) {
 		t.Fatalf("failed to read output message: %v", err)
 	}
 
-	if string(msg.Key) != mockServer.URL {
-		t.Errorf("expected key %s, got %s", mockServer.URL, string(msg.Key))
+	if string(msg.Key) != fixtureURL {
+		t.Errorf("expected key %s, got %s", fixtureURL, string(msg.Key))
 	}
-	if string(msg.Value) != "<html><body>E2E Test Content</body></html>" {
-		t.Errorf("expected body '<html><body>E2E Test Content</body></html>', got %s", string(msg.Value))
+	var payload struct {
+		URL   string `json:"url"`
+		S3Key string `json:"s3_key"`
+	}
+	if err := json.Unmarshal(msg.Value, &payload); err != nil {
+		t.Fatalf("expected JSON storage-reference envelope, got %q: %v", msg.Value, err)
+	}
+	if payload.URL != fixtureURL || payload.S3Key != "e2e-rendered-page.html" {
+		t.Errorf("expected payload for %s with key e2e-rendered-page.html, got %+v", fixtureURL, payload)
+	}
+	if st.savedDocument.URL != fixtureURL || st.savedDocument.Content != "<html><body>E2E Test Content</body></html>" {
+		t.Errorf("expected rendered content to be saved before publishing, got %+v", st.savedDocument)
 	}
 }
-
-
