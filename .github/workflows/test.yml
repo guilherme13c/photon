@@ -17,6 +17,8 @@ jobs:
         with: {version: '0.16.0'}
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
+      - name: Install Frontier native dependencies
+        run: sudo apt-get update && sudo apt-get install --yes libhiredis-dev librdkafka-dev
       - name: Install embedder test dependencies
         run: python -m venv .venv && .venv/bin/pip install -r embedder/requirements.txt
       - name: Fast gate
