@@ -74,7 +74,7 @@ services:
       kafka-topics --bootstrap-server kafka:29092 --list
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -87,7 +87,7 @@ services:
       - ./minio_data:/data
 
   init-minio:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       - minio
     environment:
