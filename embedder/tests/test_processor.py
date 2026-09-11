@@ -33,7 +33,7 @@ def test_process_message_valid_json(mocker, mock_vector_store, mock_object_store
 
     processor.process_message(message)
 
-    mock_model_instance.encode.assert_called_once_with("This is an example document.")
+    mock_model_instance.encode.assert_called_once_with("Example\nThis is an example document.")
     mock_vector_store.insert.assert_called_once_with(
         "http://example.com", 
         "Example", 
