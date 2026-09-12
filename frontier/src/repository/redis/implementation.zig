@@ -63,7 +63,8 @@ pub const Redis = struct {
         defer c.freeReplyObject(reply);
         if (reply.type == c.REDIS_REPLY_NIL) return null;
         if (reply.type != c.REDIS_REPLY_STRING) return error.UnexpectedRedisReply;
-        return allocator.dupe(u8, reply.str[0..@intCast(reply.len)]);
+        const value: []const u8 = try allocator.dupe(u8, reply.str[0..@intCast(reply.len)]);
+        return value;
     }
 
     fn setCache(ptr: *anyopaque, key: []const u8, value: []const u8, ttl_seconds: u32) anyerror!void {
@@ -132,7 +133,8 @@ pub const Redis = struct {
         defer c.freeReplyObject(reply);
         if (reply.type == c.REDIS_REPLY_NIL) return null;
         if (reply.type != c.REDIS_REPLY_STRING) return error.UnexpectedRedisReply;
-        return allocator.dupe(u8, reply.str[0..@intCast(reply.len)]);
+        const domain: []const u8 = try allocator.dupe(u8, reply.str[0..@intCast(reply.len)]);
+        return domain;
     }
 
     fn fetchReadyUrls(ptr: *anyopaque, allocator: std.mem.Allocator, shard: u8, domain: []const u8, current_time_ms: i64) anyerror![][]const u8 {
