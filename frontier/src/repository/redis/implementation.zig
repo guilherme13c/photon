@@ -11,10 +11,11 @@ const c = @cImport({ @cInclude("hiredis/hiredis.h"); });
 
 pub const Redis = struct {
     ctx: *c.redisContext,
+    io: std.Io,
     // hiredis' synchronous redisContext is not safe to use concurrently.
-    mutex: std.Thread.Mutex = .{},
+    mutex: std.Io.Mutex = .init,
 
-    pub fn init(url: []const u8) !Redis {
+    pub fn init(url: []const u8, io: std.Io) !Redis {
         const parsed = parsed_url.parseUrl(url);
         var host_buf: [256]u8 = undefined;
         if (parsed.host.len >= host_buf.len) return error.HostTooLong;
@@ -26,7 +27,7 @@ pub const Redis = struct {
             c.redisFree(ctx);
             return error.RedisConnectionFailed;
         }
-        return .{ .ctx = ctx };
+        return .{ .ctx = ctx, .io = io };
     }
 
     pub fn deinit(self: *Redis) void { c.redisFree(self.ctx); }
@@ -56,8 +57,8 @@ pub const Redis = struct {
 
     fn getCache(ptr: *anyopaque, allocator: std.mem.Allocator, key: []const u8) anyerror!?[]const u8 {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const reply = try checkedReply(c.redisCommand(self.ctx, "GET %b", key.ptr, key.len));
         defer c.freeReplyObject(reply);
         if (reply.type == c.REDIS_REPLY_NIL) return null;
@@ -67,8 +68,8 @@ pub const Redis = struct {
 
     fn setCache(ptr: *anyopaque, key: []const u8, value: []const u8, ttl_seconds: u32) anyerror!void {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const reply = try checkedReply(c.redisCommand(self.ctx, "SETEX %b %u %b", key.ptr, key.len, ttl_seconds, value.ptr, value.len));
         defer c.freeReplyObject(reply);
     }
@@ -77,8 +78,8 @@ pub const Redis = struct {
     // Redis Cluster while still distributing hosts across 64 independent slots.
     fn admitUrl(ptr: *anyopaque, domain: []const u8, url_hash: u64, url: []const u8, current_time_ms: i64, delay_ms: i64, next_crawl_timestamp: i64) anyerror!AdmissionResult {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         const shard = shardForDomain(domain);
         var url_key_buf: [384]u8 = undefined;
         var state_key_buf: [512]u8 = undefined;
@@ -117,8 +118,8 @@ pub const Redis = struct {
 
     fn claimReadyHost(ptr: *anyopaque, allocator: std.mem.Allocator, shard: u8, current_time_ms: i64) anyerror!?[]const u8 {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         var ready_key_buf: [128]u8 = undefined;
         const ready_key = try std.fmt.bufPrint(&ready_key_buf, "frontier:{{{d}}}:ready-hosts", .{shard});
         const script =
@@ -136,8 +137,8 @@ pub const Redis = struct {
 
     fn fetchReadyUrls(ptr: *anyopaque, allocator: std.mem.Allocator, shard: u8, domain: []const u8, current_time_ms: i64) anyerror![][]const u8 {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         var queue_key_buf: [512]u8 = undefined;
         var ready_key_buf: [128]u8 = undefined;
         var stats_key_buf: [512]u8 = undefined;
@@ -171,8 +172,8 @@ pub const Redis = struct {
 
     fn getActiveDomainCount(ptr: *anyopaque) anyerror!u64 {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         var count: u64 = 0;
         for (0..frontier_shard_count) |shard| {
             var key_buf: [128]u8 = undefined;
@@ -187,8 +188,8 @@ pub const Redis = struct {
 
     fn getTopHosts(ptr: *anyopaque, allocator: std.mem.Allocator, limit: usize) anyerror![]HostDiagnostic {
         const self: *Redis = @ptrCast(@alignCast(ptr));
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         var hosts: std.ArrayList(HostDiagnostic) = .empty;
         errdefer {
             for (hosts.items) |host| allocator.free(host.host);

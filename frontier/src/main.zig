@@ -29,7 +29,7 @@ pub fn main(init: std.process.Init) !void {
         mutable_path,
     );
 
-    var redis = try Redis.init(cfg.redis_url);
+    var redis = try Redis.init(cfg.redis_url, init.io);
     defer redis.deinit();
 
     var kafka_producer = try KafkaProducer.init(
