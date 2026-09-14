@@ -1,4 +1,4 @@
-.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker build-search run-frontier run-extractor run-fetcher run-renderer run-embedder run-search test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-search test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
+.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker build-search run-frontier run-extractor run-fetcher run-renderer run-embedder run-search test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-search test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-search benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 
 build: build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker build-search
 
@@ -81,6 +81,10 @@ benchmark-functions:
 
 benchmark-services:
 	python3 scripts/run-benchmarks.py service
+
+benchmark-search:
+	@test -n "$(PHOTON_SEARCH_URL)" || (echo "set PHOTON_SEARCH_URL to disposable search service" >&2; exit 2)
+	python3 scripts/benchmark_search.py --url "$(PHOTON_SEARCH_URL)"
 
 benchmark-e2e:
 	python3 scripts/run-benchmarks.py e2e

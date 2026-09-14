@@ -27,6 +27,12 @@ It requires the isolated Compose project created by `make benchmark`; invoking
 the Python service runner against an arbitrary developer stack is deliberately
 rejected.
 
+`make benchmark-search` runs the report-only semantic-search benchmark against
+the disposable service URL in `PHOTON_SEARCH_URL`. It uses a fixed versioned
+query corpus, configurable concurrency and duration, and reports successful
+throughput plus p50, p75, p90, p95, and p99 request latency. Errors are excluded
+from successful throughput and the JSON report is written under `artifacts/`.
+
 Each downstream case sends eight records by default, measures wall-clock time
 from Kafka production to verified output, and records throughput. Set
 `PHOTON_SERVICE_BENCHMARK_MESSAGES` only when creating a separately labelled

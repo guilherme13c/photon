@@ -32,6 +32,8 @@ def summarize(samples_ms: list[float]) -> dict[str, Any]:
         "mean_ms": statistics.fmean(samples_ms) if samples_ms else None,
         "stdev_ms": statistics.stdev(samples_ms) if len(samples_ms) > 1 else 0.0,
         "p50_ms": percentile(samples_ms, 50),
+        "p75_ms": percentile(samples_ms, 75),
+        "p90_ms": percentile(samples_ms, 90),
         "p95_ms": percentile(samples_ms, 95),
         "p99_ms": percentile(samples_ms, 99),
         "max_ms": max(samples_ms) if samples_ms else None,
