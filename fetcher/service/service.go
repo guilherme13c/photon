@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -64,7 +65,8 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 	inFlight.Inc()
 	defer func() { inFlight.Dec(); processDuration.Observe(time.Since(started).Seconds()) }()
 	url := string(msg.Value)
-	log.Printf("Fetching URL: %s", url)
+	correlationID := newCorrelationID()
+	log.Printf("event=fetch_started correlation_id=%s url=%q partition=%d offset=%d", correlationID, url, msg.Partition, msg.Offset)
 
 	// 1. Fetch HTML
 	fetchStarted := time.Now()
@@ -124,7 +126,8 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 		URL                 string `json:"url"`
 		S3Key               string `json:"s3_key"`
 		PipelineStartedAtMS int64  `json:"pipeline_started_at_ms"`
-	}{URL: url, S3Key: s3Key, PipelineStartedAtMS: started.UnixMilli()})
+		CorrelationID       string `json:"correlation_id"`
+	}{URL: url, S3Key: s3Key, PipelineStartedAtMS: started.UnixMilli(), CorrelationID: correlationID})
 	if err != nil {
 		urlsProcessed.WithLabelValues("serialize_error").Inc()
 		return fmt.Errorf("serialize fetched page: %w", err)
@@ -139,8 +142,21 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 	stageDuration.WithLabelValues("produce_fetched_page").Observe(time.Since(produceStarted).Seconds())
 
 	urlsProcessed.WithLabelValues("success").Inc()
-	log.Printf("Successfully processed %s", url)
+	log.Printf("event=fetch_succeeded correlation_id=%s url=%q", correlationID, url)
 	return nil
+}
+
+// newCorrelationID is deliberately opaque and carried in event envelopes and
+// logs. It is never used as a Prometheus label, where its cardinality would be
+// unbounded. A trace backend may use it as a searchable attribute.
+func newCorrelationID() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		// crypto/rand failures are exceptional; retain a non-empty ID so an
+		// individual item is still searchable while avoiding a process crash.
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%x", value)
 }
 
 func admissionKey(rawURL string) []byte {

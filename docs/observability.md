@@ -4,7 +4,7 @@ This document describes the monitoring and observability setup for the Photon pi
 
 ## Overview
 
-Every component in the Photon pipeline — both custom services and infrastructure — is instrumented with Prometheus metrics. A central Prometheus server scrapes all targets, and a pre-provisioned Grafana instance provides dashboards out of the box.
+Every component in the Photon pipeline — both custom services and infrastructure — is instrumented with Prometheus metrics. A central Prometheus server scrapes all targets, and a pre-provisioned Grafana instance provides dashboards out of the box. Loki collects container logs and Tempo accepts OpenTelemetry traces. The operational objectives and correlation contract are defined in [SLOs](slo.md).
 
 ## Quick Start
 
@@ -14,6 +14,8 @@ docker compose up --build
 
 - **Grafana:** [http://localhost:3001](http://localhost:3001) — Login: `admin` / `admin`
 - **Prometheus:** [http://localhost:9090](http://localhost:9090)
+- **Loki:** [http://localhost:3100](http://localhost:3100)
+- **Tempo:** [http://localhost:3200](http://localhost:3200) (OTLP: `4317` / `4318` inside Compose)
 
 No manual setup is required. Grafana auto-provisions the Prometheus datasource and the **Photon Pipeline** dashboard on first boot.
 
@@ -66,6 +68,10 @@ The renderer serves metrics on port `3000`.
 ```
 config/
 ├── prometheus.yml                              # Prometheus scrape config
+├── prometheus-rules/photon-slo.yml              # SLI recording and alert rules
+├── loki.yml                                     # Central log store
+├── promtail.yml                                 # Docker log collector
+├── tempo.yml                                    # OTLP trace store
 └── grafana/
     ├── provisioning/
     │   ├── datasources/prometheus.yml          # Auto-provision Prometheus datasource

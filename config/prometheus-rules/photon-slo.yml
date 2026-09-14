@@ -1,0 +1,77 @@
+groups:
+  - name: photon-sli-recording
+    interval: 30s
+    rules:
+      - record: photon:fetcher_success_ratio:5m
+        expr: sum(rate(fetcher_urls_processed_total{status="success"}[5m])) / clamp_min(sum(rate(fetcher_urls_processed_total[5m])), 1)
+      - record: photon:renderer_success_ratio:5m
+        expr: sum(rate(renderer_pages_rendered_total{status="success"}[5m])) / clamp_min(sum(rate(renderer_pages_rendered_total[5m])), 1)
+      - record: photon:embedder_success_ratio:5m
+        expr: sum(rate(embedder_messages_processed_total{status="success"}[5m])) / clamp_min(sum(rate(embedder_messages_processed_total[5m])), 1)
+      - record: photon:fetcher_p95_seconds:5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(fetcher_process_duration_seconds_bucket[5m])))
+      - record: photon:renderer_p95_seconds:5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(renderer_process_duration_seconds_bucket[5m])))
+      - record: photon:embedder_p95_seconds:5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(embedder_process_duration_seconds_bucket[5m])))
+      # Short-window user-journey SLIs. The throughput ratio only evaluates
+      # when the pipeline has enough completed upstream work to be meaningful.
+      - record: photon:terminal_throughput_per_second:15m
+        expr: sum(rate(embedder_messages_processed_total{status="success"}[15m]))
+      - record: photon:extractor_document_throughput_per_second:15m
+        expr: sum(rate(documents_produced_total[15m]))
+      - record: photon:end_to_end_p95_seconds:15m
+        expr: histogram_quantile(0.95, sum by (le) (rate(photon_end_to_end_duration_seconds_bucket[15m])))
+
+  - name: photon-slo-alerts
+    rules:
+      - alert: PhotonServiceUnavailable
+        expr: up{job=~"frontier|fetcher|renderer|extractor|embedder"} == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Photon service {{ $labels.job }} is unreachable"
+          runbook: "docs/slo.md#service-availability"
+      - alert: PhotonPipelineErrorBudgetBurn
+        expr: (1 - photon:fetcher_success_ratio:5m) > (14.4 * 0.001) or (1 - photon:renderer_success_ratio:5m) > (14.4 * 0.005) or (1 - photon:embedder_success_ratio:5m) > (14.4 * 0.001)
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Photon is burning a monthly success SLO budget too quickly"
+          runbook: "docs/slo.md#error-budget-policy"
+      - alert: PhotonPipelineLatencySLOViolation
+        expr: photon:fetcher_p95_seconds:5m > 5 or photon:renderer_p95_seconds:5m > 30 or photon:embedder_p95_seconds:5m > 10
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Photon stage p95 latency exceeds its SLO"
+          runbook: "docs/slo.md#latency-objective"
+      - alert: PhotonKafkaConsumerLagHigh
+        expr: sum(kafka_consumergroup_lag{consumergroup=~"fetcher-group|renderer-group|extractor-group|ray-embedder-workers"}) > 10000
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Photon consumer lag is above 10,000 records"
+          runbook: "docs/slo.md#freshness-objective"
+      - alert: PhotonShortTermThroughputSLOViolation
+        # At least one document/s is eligible at Extractor, but fewer than 95%
+        # of that rate is reaching Qdrant. It is not evaluated for idle crawls.
+        expr: photon:extractor_document_throughput_per_second:15m >= 1 and photon:terminal_throughput_per_second:15m < (0.95 * photon:extractor_document_throughput_per_second:15m)
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Photon terminal throughput is below 95% of eligible document throughput"
+          runbook: "docs/slo.md#short-window-throughput-objective"
+      - alert: PhotonShortTermEndToEndLatencySLOViolation
+        expr: photon:end_to_end_p95_seconds:15m > 60
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Photon p95 end-to-end latency exceeds 60 seconds"
+          runbook: "docs/slo.md#short-window-end-to-end-latency-objective"

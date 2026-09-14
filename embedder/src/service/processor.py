@@ -69,6 +69,7 @@ class EmbeddingProcessorService:
                     text = data.get("text", "")
                     s3_key = data.get("s3_key", "")
                     pipeline_started_at_ms = data.get("pipeline_started_at_ms")
+                    correlation_id = data.get("correlation_id")
                     if isinstance(text, list):
                         text = bytes(text).decode("utf-8", errors="replace")
                     if isinstance(title, list):
@@ -83,6 +84,7 @@ class EmbeddingProcessorService:
                             "title": title,
                             "text": text,
                             "pipeline_started_at_ms": pipeline_started_at_ms,
+                            "correlation_id": correlation_id,
                         })
                     else:
                         embeddings_processed_total.labels(status="empty").inc()

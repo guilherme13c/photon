@@ -373,6 +373,30 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/prometheus-rules:/etc/prometheus/rules:ro
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./config/loki.yml:/etc/loki/config.yml:ro
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    volumes:
+      - ./config/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/config.yml"]
+    volumes:
+      - ./config/tempo.yml:/etc/tempo/config.yml:ro
+      - tempo_data:/tmp/tempo
 
   grafana:
     image: grafana/grafana:latest
@@ -391,3 +415,5 @@ volumes:
   kafka_data:
   zookeeper_data:
   zookeeper_log:
+  promtail_positions:
+  tempo_data:

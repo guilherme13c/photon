@@ -62,6 +62,12 @@ The machine learning pipeline responsible for generating vector embeddings.
 - **Redis Exporter:** Sidecar (`oliver006/redis_exporter`) exposing memory usage, connected clients, and key statistics.
 - **MinIO:** Native Prometheus metrics via `MINIO_PROMETHEUS_AUTH_TYPE=public`.
 - **Qdrant:** Native metrics exposed on port 6333 (`/metrics`).
+- **SLOs and alerts:** Prometheus recording rules and actionable burn-rate,
+  availability, latency, and consumer-lag alerts. See [the reliability
+  contract](docs/slo.md).
+- **Logs and traces:** Promtail ships structured container logs to Loki; Tempo
+  provides a shared OTLP trace endpoint. Pipeline envelopes carry an opaque
+  `correlation_id` for item-level investigation without high-cardinality metrics.
 
 ## Prerequisites
 - **Go** >= 1.22

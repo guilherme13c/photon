@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -49,7 +51,8 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 	renderInFlight.Inc()
 	defer func() { renderInFlight.Dec(); renderDuration.Observe(time.Since(started).Seconds()) }()
 	url := string(msg.Value)
-	log.Printf("Fetching URL: %s", url)
+	correlationID := newCorrelationID()
+	log.Printf("event=render_started correlation_id=%s url=%q", correlationID, url)
 
 	// 1. Fetch HTML
 	content, err := s.client.Fetch(ctx, url)
@@ -76,10 +79,12 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 		URL                 string `json:"url"`
 		S3Key               string `json:"s3_key"`
 		PipelineStartedAtMS int64  `json:"pipeline_started_at_ms"`
+		CorrelationID       string `json:"correlation_id"`
 	}{
 		URL:                 url,
 		S3Key:               s3Key,
 		PipelineStartedAtMS: started.UnixMilli(),
+		CorrelationID:       correlationID,
 	})
 	if err != nil {
 		log.Printf("Failed to marshal message for %s: %v", url, err)
@@ -92,6 +97,14 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 		return
 	}
 
-	log.Printf("Successfully processed %s", url)
+	log.Printf("event=render_succeeded correlation_id=%s url=%q", correlationID, url)
 	pagesRenderedTotal.WithLabelValues("success").Inc()
+}
+
+func newCorrelationID() string {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("%x", value)
 }

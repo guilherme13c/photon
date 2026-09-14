@@ -6,6 +6,7 @@
     "url": "https://example.test/articles/one",
     "title": "One",
     "text": "Example document body.",
-    "s3_key": "pages/example.test/articles/one.html"
+    "s3_key": "pages/example.test/articles/one.html",
+    "correlation_id": "4fa8fc5d4c8d65f3df8c3d68bb4cfd75"
   }
 }

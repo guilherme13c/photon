@@ -40,7 +40,7 @@ pub const Service = struct {
         };
     }
 
-    pub fn processHtml(self: *Service, url: []const u8, html: []const u8, s3_key: []const u8, pipeline_started_at_ms: ?i64) !void {
+    pub fn processHtml(self: *Service, url: []const u8, html: []const u8, s3_key: []const u8, pipeline_started_at_ms: ?i64, correlation_id: ?[]const u8) !void {
         _ = self.html_processed_total.fetchAdd(1, .monotonic);
         var parsed = html_parser.parseHtml(self.allocator, html) catch |err| {
             std.log.err("Failed to parse HTML for URL {s}: {}", .{ url, err });
@@ -76,6 +76,7 @@ pub const Service = struct {
             text: []const u8,
             s3_key: []const u8,
             pipeline_started_at_ms: ?i64,
+            correlation_id: ?[]const u8,
         };
         const doc = Doc{
             .url = url,
@@ -83,6 +84,7 @@ pub const Service = struct {
             .text = parsed.text.items,
             .s3_key = s3_key,
             .pipeline_started_at_ms = pipeline_started_at_ms,
+            .correlation_id = correlation_id,
         };
 
         const json_buf = std.json.Stringify.valueAlloc(self.allocator, doc, .{}) catch |err| {
@@ -166,6 +168,7 @@ pub const Service = struct {
             url: []const u8,
             s3_key: []const u8,
             pipeline_started_at_ms: ?i64 = null,
+            correlation_id: ?[]const u8 = null,
         };
 
         var parsed_json = std.json.parseFromSlice(Payload, self.allocator, value, .{ .ignore_unknown_fields = true }) catch |err| {
@@ -243,7 +246,7 @@ pub const Service = struct {
         defer self.allocator.free(html_content);
         std.log.info("Read {} bytes of HTML content.", .{html_content.len});
 
-        try self.processHtml(url, html_content, s3_key, parsed_json.value.pipeline_started_at_ms);
+        try self.processHtml(url, html_content, s3_key, parsed_json.value.pipeline_started_at_ms, parsed_json.value.correlation_id);
     }
 
     pub fn startConsuming(self: *Service, consumer: _KafkaConsumer) !void {
@@ -263,7 +266,7 @@ test "Service processes HTML and produces messages" {
         \\<body><a href="http://example.com">link</a></body></html>
     ;
 
-    try svc.processHtml("http://test.com", html, "dummy-key.html", null);
+    try svc.processHtml("http://test.com", html, "dummy-key.html", null, null);
 
     try std.testing.expectEqual(@as(usize, 1), producer.published_urls);
     try std.testing.expectEqual(@as(usize, 1), producer.published_documents);
