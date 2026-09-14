@@ -49,9 +49,9 @@ The machine learning pipeline responsible for generating vector embeddings.
 - **Storage:** Upserts the generated vectors and metadata directly into Qdrant.
 - **Metrics:** Exposes `/metrics` via `prometheus_client` with `embeddings_processed_total` counter by status.
 
-### 6. Search (Go)
+### 6. Search (Python)
 - **API:** Exposes `GET /v1/search?q=...&limit=...&cursor=...` for semantic search with pagination.
-- **Inference:** Reuses the Embedder's `all-MiniLM-L6-v2` model through its internal embedding endpoint.
+- **Inference:** Loads `all-MiniLM-L6-v2` locally in the Search process.
 - **Storage:** Queries the `photon_documents` Qdrant collection and returns chunk metadata and similarity scores.
 - **Metrics:** Exposes `/metrics` with request throughput, status counters, result counts, and request latency buckets.
 

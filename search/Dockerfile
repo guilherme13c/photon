@@ -1,12 +1,12 @@
-FROM golang:1.23 AS build
+FROM python:3.10-slim
 
-WORKDIR /src
-COPY go.mod ./
-COPY *.go ./
-COPY cmd ./cmd
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/search ./cmd/search
+WORKDIR /app
 
-FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/search /search
+COPY requirements.txt .
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+
+COPY src/ ./src/
+
+ENV PYTHONPATH=/app
 EXPOSE 8082
-ENTRYPOINT ["/search"]
+CMD ["python", "-m", "src.main"]

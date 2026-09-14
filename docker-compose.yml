@@ -244,7 +244,6 @@ services:
       EMBED_BATCH_WAIT_MS: ${PHOTON_EMBED_BATCH_WAIT_MS:-25}
       EMBED_MAX_TEXT_CHARS: ${PHOTON_EMBED_MAX_TEXT_CHARS:-8192}
       PROMETHEUS_PORT: ${EMBEDDER_PROMETHEUS_PORT:-8000}
-      EMBEDDING_API_PORT: ${EMBEDDER_API_PORT:-8002}
     deploy:
       resources:
         limits:
@@ -255,19 +254,19 @@ services:
     build:
       context: ./search
     depends_on:
-      embedder:
-        condition: service_started
       qdrant:
         condition: service_started
     environment:
       SEARCH_LISTEN_ADDR: :8082
-      SEARCH_EMBEDDER_URL: http://embedder:8002
+      MODEL_NAME: ${MODEL_NAME:-all-MiniLM-L6-v2}
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-photon_documents}
       SEARCH_VECTOR_DIMENSIONS: ${SEARCH_VECTOR_DIMENSIONS:-384}
     ports:
       - "${SEARCH_PORT:-8082}:8082"
+    volumes:
+      - search_model_cache:/root/.cache/huggingface
     restart: unless-stopped
     deploy:
       resources:
@@ -442,3 +441,4 @@ volumes:
   zookeeper_log:
   promtail_positions:
   tempo_data:
+  search_model_cache:

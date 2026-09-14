@@ -1,13 +1,10 @@
 # Search API contract
 
-The search service will expose semantic search over the vectors in Qdrant.
-The first contract slice defines the request and pagination behavior used by
-the future HTTP handler.
+The Python search service exposes semantic search over the vectors in Qdrant.
 
-Queries use the existing Embedder's `all-MiniLM-L6-v2` model through an
-internal `POST /v1/embed` contract. The response must contain one 384-dimensional
-vector for each submitted text. Keeping inference in the existing Python
-process ensures indexing and search use the same model and normalization.
+Queries use the local `all-MiniLM-L6-v2` SentenceTransformer model. The model
+must match the model used by the indexing Embedder and produces 384-dimensional
+vectors for the default configuration.
 
 ## Request
 
@@ -42,20 +39,20 @@ client.
 
 ## Service configuration
 
-The Go service supports these environment variables:
+The service supports these environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `SEARCH_LISTEN_ADDR` | `:8082` | HTTP listen address. |
-| `SEARCH_EMBEDDER_URL` | `http://embedder:8002` | Internal embedding endpoint. |
+| `MODEL_NAME` | `all-MiniLM-L6-v2` | Local SentenceTransformer model. |
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant endpoint. |
 | `QDRANT_API_KEY` | empty | Optional Qdrant API key. |
 | `QDRANT_COLLECTION_NAME` | `photon_documents` | Vector collection. |
 | `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
 
 The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`.
-`/readyz` checks both the internal embedding API and the configured Qdrant
-collection with a one-second timeout.
+`/readyz` checks the configured Qdrant collection. Model loading happens before
+the HTTP server starts, so a running service has a loaded local model.
 
 ## Observability
 

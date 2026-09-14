@@ -18,7 +18,7 @@ build-cleanup-worker:
 	cd cleanup-worker && zig build
 
 build-search:
-	cd search && go build ./cmd/search
+	cd search && python3 -m py_compile src/*.py
 
 run: run-frontier run-extractor run-fetcher run-renderer run-embedder
 
@@ -38,7 +38,7 @@ run-embedder:
 	cd embedder && . ../.venv/bin/activate && PYTHONPATH=. python -m src.main
 
 run-search:
-	cd search && go run ./cmd/search
+	cd search && PYTHONPATH=. python3 -m src.main
 
 test: test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-search
 
@@ -114,7 +114,7 @@ test-cleanup-worker:
 	cd cleanup-worker && zig build test --summary all
 
 test-search:
-	cd search && GOCACHE=/tmp/photon-go-build-cache go test ./...
+	cd search && PYTHONPATH=. python3 -m pytest
 
 clean: clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 

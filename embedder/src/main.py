@@ -1,12 +1,9 @@
 import logging
-import threading
-from http.server import ThreadingHTTPServer
 from src.config.config import Config
 from src.repository.kafka_consumer import KafkaConsumerRepository
 from src.repository.vector_store import VectorStoreRepository
 from src.repository.kafka_producer import KafkaProducerRepository
 from src.service.processor import EmbeddingProcessorService
-from src.service.embedding_api import make_handler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,9 +52,6 @@ def main():
     # inside a consumer process.
     logger.info("Starting one Embedder worker in this process...")
     worker = EmbedderWorker(config)
-    embedding_server = ThreadingHTTPServer(("0.0.0.0", config.embedding_api_port), make_handler(worker.processor.model))
-    threading.Thread(target=embedding_server.serve_forever, daemon=True).start()
-    logger.info(f"Started embedding API on port {config.embedding_api_port}")
     worker.process_messages()
 
 if __name__ == "__main__":
