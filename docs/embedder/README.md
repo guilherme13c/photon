@@ -4,7 +4,7 @@ The Embedder is a Python-based machine learning worker that consumes cleaned doc
 
 ## Core Responsibilities
 
-1. **Vector Inference:** Consumes from the `cleaned_documents` Kafka topic and runs the text payload through a pre-trained `SentenceTransformer` (default: `all-MiniLM-L6-v2`) to generate a fixed-size float array (e.g. 384 dimensions).
+1. **Contract Validation and Vector Inference:** Consumes versioned records from the `cleaned_documents` Kafka topic. It accepts legacy v1 records and v2 records with normalized-content metadata, then runs the text payload through a pre-trained `SentenceTransformer` (default: `all-MiniLM-L6-v2`) to generate a fixed-size float array (e.g. 384 dimensions).
 2. **Vector Storage:** Deterministically hashes the URL into a UUID5 to serve as a unique point ID, and upserts the vector along with standard payload metadata (URL, title, full text) into the Qdrant vector database.
 3. **Batching and Scaling:** Collects bounded Kafka batches, calls the model once
 per batch, and submits one Qdrant upsert. Scale via ordinary service replicas

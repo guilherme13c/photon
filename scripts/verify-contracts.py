@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ROOT / "tests" / "contracts" / "v1"
+FIXTURES = ROOT / "tests" / "contracts"
 
 EXPECTED = {
     "raw-url.json": ("discovered-urls", str),
@@ -22,7 +22,7 @@ def fail(message):
 
 def main():
     for name, (topic, value_type) in EXPECTED.items():
-        record = json.loads((FIXTURES / name).read_text())
+        record = json.loads((FIXTURES / "v1" / name).read_text())
         if record.get("version") != 1 or record.get("topic") != topic:
             return fail(f"{name}: version/topic mismatch")
         if not isinstance(record.get("key"), str) or not record["key"]:
@@ -42,7 +42,17 @@ def main():
             return fail(f"{name}: text must be a string")
         if name == "object-cleanup.json" and (not isinstance(value.get("s3_key"), str) or not value["s3_key"]):
             return fail(f"{name}: s3_key must be a non-empty string")
-    invalid = json.loads((ROOT / "tests/contracts/invalid/missing-s3-key.json").read_text())
+    v2 = json.loads((FIXTURES / "v2" / "cleaned-document.json").read_text())
+    if v2.get("version") != 2 or v2.get("topic") != "cleaned_documents":
+        return fail("v2 cleaned-document: version/topic mismatch")
+    v2_value = v2.get("value", {})
+    for field in ("url", "title", "text", "main_text", "canonical_url", "content_hash", "language", "content_type", "s3_key"):
+        if not isinstance(v2_value.get(field), str) or not v2_value[field]:
+            return fail(f"v2 cleaned-document: {field} must be a non-empty string")
+    if not isinstance(v2_value.get("quality_score"), (int, float)) or not 0 <= v2_value["quality_score"] <= 1:
+        return fail("v2 cleaned-document: quality_score must be between 0 and 1")
+
+    invalid = json.loads((FIXTURES / "invalid/missing-s3-key.json").read_text())
     if "s3_key" in invalid.get("value", {}):
         return fail("invalid fixture accidentally became valid")
     print(f"validated {len(EXPECTED)} v1 Kafka contracts")

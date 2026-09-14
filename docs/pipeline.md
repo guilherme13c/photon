@@ -47,7 +47,7 @@ The `extractor` (Tier 1 Parser) processes the raw HTML coming from the Fetcher a
 - **Input:** Consumes JSON payloads from the `fetched-pages` topic and retrieves the corresponding raw HTML from MinIO using the provided `s3_key`.
 - **Link Extraction:** Parses `href` attributes and publishes discovered links to `discovered-urls`, which is consumed by scalable admission workers before crawl dispatch.
 - **Text Cleaning:** Strips HTML tags, styles, and scripts to extract clean text.
-- **Forwarding:** Publishes cleaned documents and metadata to the `cleaned_documents` topic.
+- **Forwarding:** Publishes versioned cleaned documents and metadata to the `cleaned_documents` topic. The v2 contract reserves fields for canonical URL, main text, content hash, language, content type, and extraction quality; the Embedder accepts v1 during rollout.
 - **Metrics:** Runs a dedicated HTTP server (configurable port via `PROMETHEUS_PORT`, default `8001`) exposing `html_processed_total`, `urls_extracted_total`, and `documents_produced_total`.
 
 ### 5. Accumulation Buffer (Kafka)

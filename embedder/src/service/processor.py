@@ -5,6 +5,7 @@ import time
 from prometheus_client import Counter, Gauge, Histogram
 from sentence_transformers import SentenceTransformer
 from src.repository.vector_store import VectorStoreRepository
+from src.service.contracts import parse_cleaned_document
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +63,10 @@ class EmbeddingProcessorService:
             for message in messages:
                 try:
                     data = json.loads(message.decode("utf-8"))
-                    if not isinstance(data, dict):
-                        raise ValueError("document must be a JSON object")
-                    url = data.get("url", "")
-                    title = data.get("title", "")
-                    text = data.get("text", "")
+                    data = parse_cleaned_document(data)
+                    url = data["url"]
+                    title = data["title"]
+                    text = data["text"]
                     s3_key = data.get("s3_key", "")
                     pipeline_started_at_ms = data.get("pipeline_started_at_ms")
                     correlation_id = data.get("correlation_id")
