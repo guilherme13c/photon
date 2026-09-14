@@ -4,6 +4,11 @@ The search service will expose semantic search over the vectors in Qdrant.
 The first contract slice defines the request and pagination behavior used by
 the future HTTP handler.
 
+Queries use the existing Embedder's `all-MiniLM-L6-v2` model through an
+internal `POST /v1/embed` contract. The response must contain one 384-dimensional
+vector for each submitted text. Keeping inference in the existing Python
+process ensures indexing and search use the same model and normalization.
+
 ## Request
 
 `GET /v1/search?q=<query>&limit=<limit>&cursor=<cursor>`
