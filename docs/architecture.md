@@ -28,7 +28,8 @@ Extractor ───────────────────────�
 | Fetcher (Go) | Retrieves static HTML; classifies SPA-like documents; stores static content. | MinIO object is written before `fetched-pages` is published. |
 | Renderer (Go) | Runs Chromium for JavaScript pages and stores rendered HTML. | MinIO object is written before `fetched-pages` is published. |
 | Extractor (Zig) | Downloads HTML by key, extracts links/text, publishes cleaned documents. | Kafka `cleaned_documents`. |
-| Embedder (Python) | Batches cleaned text, runs inference, upserts Qdrant, and durably queues temporary-object cleanup. | A Qdrant batch upsert followed by a Kafka cleanup record. |
+| Embedder (Python) | Batches cleaned text, serves query inference, runs inference, upserts Qdrant, and durably queues temporary-object cleanup. | A Qdrant batch upsert followed by a Kafka cleanup record. |
+| Search (Go) | Embeds query text through the Embedder, searches Qdrant, and returns paginated chunk results. | A request-scoped Qdrant query. |
 | Cleanup worker (Zig) | Consumes cleanup records and deletes MinIO objects in bounded batches. | MinIO batch deletion and committed Kafka offsets. |
 | Kafka | Topic transport, consumer groups, retry boundaries, and DLQ topics. | Retained records and offsets. |
 

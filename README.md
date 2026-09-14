@@ -49,14 +49,20 @@ The machine learning pipeline responsible for generating vector embeddings.
 - **Storage:** Upserts the generated vectors and metadata directly into Qdrant.
 - **Metrics:** Exposes `/metrics` via `prometheus_client` with `embeddings_processed_total` counter by status.
 
-### 6. Infrastructure
+### 6. Search (Go)
+- **API:** Exposes `GET /v1/search?q=...&limit=...&cursor=...` for semantic search with pagination.
+- **Inference:** Reuses the Embedder's `all-MiniLM-L6-v2` model through its internal embedding endpoint.
+- **Storage:** Queries the `photon_documents` Qdrant collection and returns chunk metadata and similarity scores.
+- **Metrics:** Exposes `/metrics` with request throughput, status counters, result counts, and request latency buckets.
+
+### 7. Infrastructure
 - **Apache Kafka & Zookeeper:** The central event bus connecting all components (`urls`, `fetched-pages`, `cleaned_documents`), with Dead Letter Queues (DLQ) for fault tolerance.
 - **MinIO:** S3-compatible object storage for efficiently storing large raw HTML payloads.
 - **Redis:** Used by the Frontier for state management and deduplication.
 - **Qdrant:** Destination vector database for semantic search.
 
-### 7. Observability
-- **Prometheus:** Collects metrics from all services and infrastructure components (9 scrape targets).
+### 8. Observability
+- **Prometheus:** Collects metrics from all services and infrastructure components, including Search.
 - **Grafana:** Pre-provisioned with a Prometheus datasource and a **Photon Pipeline** dashboard covering the full system.
 - **Kafka Exporter:** Sidecar (`danielqsj/kafka-exporter`) exposing consumer group lag, topic offsets, and partition health.
 - **Redis Exporter:** Sidecar (`oliver006/redis_exporter`) exposing memory usage, connected clients, and key statistics.
@@ -98,7 +104,9 @@ Key environment variables:
 | `PROMETHEUS_PORT` | `9090` | Prometheus host port |
 | `FETCHER_PROMETHEUS_PORT` | `2112` | Fetcher metrics port |
 | `EMBEDDER_PROMETHEUS_PORT` | `8000` | Embedder metrics port |
+| `EMBEDDER_API_PORT` | `8002` | Internal Embedder query-inference port |
 | `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor metrics port |
+| `SEARCH_PORT` | `8082` | Search API port |
 
 ### Monitoring
 Once the stack is running:
