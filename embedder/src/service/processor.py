@@ -5,7 +5,7 @@ import time
 from prometheus_client import Counter, Gauge, Histogram
 from sentence_transformers import SentenceTransformer
 from src.repository.vector_store import VectorStoreRepository
-from src.service.contracts import parse_cleaned_document
+from src.service.contracts import is_duplicate_content, parse_cleaned_document
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ class EmbeddingProcessorService:
         self.producer = producer
         self.batch_size = batch_size
         self.max_text_chars = max_text_chars
+        self.seen_content_hashes: set[str] = set()
         logger.info("Model loaded.")
 
     def process_message(self, message: bytes):
@@ -78,6 +79,12 @@ class EmbeddingProcessorService:
                         raise ValueError("title and text must be strings")
                     if s3_key:
                         cleanup_keys.append(s3_key)
+                    content_hash = data.get("content_hash")
+                    if content_hash is not None and not isinstance(content_hash, str):
+                        raise ValueError("content_hash must be a string")
+                    if is_duplicate_content(content_hash, self.seen_content_hashes):
+                        embeddings_processed_total.labels(status="duplicate").inc()
+                        continue
                     if text:
                         documents.append({
                             "url": url,
@@ -85,6 +92,7 @@ class EmbeddingProcessorService:
                             "text": text,
                             "pipeline_started_at_ms": pipeline_started_at_ms,
                             "correlation_id": correlation_id,
+                            "content_hash": content_hash,
                         })
                     else:
                         embeddings_processed_total.labels(status="empty").inc()

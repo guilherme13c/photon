@@ -3,6 +3,16 @@
 from typing import Any
 
 
+def is_duplicate_content(content_hash: str | None, seen_hashes: set[str]) -> bool:
+    """Record a non-empty content hash and report whether it was seen before."""
+    if not content_hash:
+        return False
+    if content_hash in seen_hashes:
+        return True
+    seen_hashes.add(content_hash)
+    return False
+
+
 def parse_cleaned_document(data: Any) -> dict[str, Any]:
     """Validate a cleaned-document value and return it with a normalized version.
 

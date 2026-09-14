@@ -10,9 +10,11 @@ pub const ParsedHtml = struct {
     links: std.ArrayList([]const u8),
     quality_score: f32,
     content_type: []const u8,
+    content_hash: []const u8,
 
     pub fn deinit(self: *ParsedHtml, allocator: std.mem.Allocator) void {
         if (self.title.len > 0) allocator.free(self.title);
+        if (self.content_hash.len > 0) allocator.free(self.content_hash);
         self.text.deinit(allocator);
         self.main_text.deinit(allocator);
         self.headings.deinit(allocator);
@@ -144,7 +146,7 @@ fn normalizeText(allocator: std.mem.Allocator, input: []const u8) !std.ArrayList
 }
 
 pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
-    var result = ParsedHtml{ .title = "", .language = "", .canonical_url = "", .text = std.ArrayList(u8).empty, .main_text = std.ArrayList(u8).empty, .headings = std.ArrayList([]const u8).empty, .links = std.ArrayList([]const u8).empty, .quality_score = 0, .content_type = "document" };
+    var result = ParsedHtml{ .title = "", .language = "", .canonical_url = "", .text = std.ArrayList(u8).empty, .main_text = std.ArrayList(u8).empty, .headings = std.ArrayList([]const u8).empty, .links = std.ArrayList([]const u8).empty, .quality_score = 0, .content_type = "document", .content_hash = "" };
     errdefer result.deinit(allocator);
     var ignored: usize = 0;
     var hidden: usize = 0;
@@ -231,6 +233,7 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
         try result.main_text.appendSlice(allocator, result.text.items);
         result.quality_score = 0.5;
     } else result.quality_score = 0.9;
+    result.content_hash = try std.fmt.allocPrint(allocator, "wyhash:{x}", .{std.hash.Wyhash.hash(0, result.main_text.items)});
     return result;
 }
 
@@ -281,4 +284,14 @@ test "normalizeText replaces invalid UTF-8 bytes" {
     var normalized = try normalizeText(allocator, "good\xfftext");
     defer normalized.deinit(allocator);
     try std.testing.expectEqualStrings("good�text", normalized.items);
+}
+
+test "parseHtml produces a stable content hash" {
+    const allocator = std.testing.allocator;
+    var first = try parseHtml(allocator, "<article><p>Same content</p></article>");
+    defer first.deinit(allocator);
+    var second = try parseHtml(allocator, "<article><p>Same content</p></article>");
+    defer second.deinit(allocator);
+    try std.testing.expectEqualStrings(first.content_hash, second.content_hash);
+    try std.testing.expect(std.mem.startsWith(u8, first.content_hash, "wyhash:"));
 }

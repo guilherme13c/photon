@@ -1,6 +1,6 @@
 import pytest
 
-from src.service.contracts import parse_cleaned_document
+from src.service.contracts import is_duplicate_content, parse_cleaned_document
 
 
 def test_v1_payload_without_version_remains_supported():
@@ -31,6 +31,7 @@ def test_v2_payload_accepts_normalized_fields():
 
     assert document["version"] == 2
     assert document["quality_score"] == 0.9
+    assert document["content_hash"] == "abc123"
 
 
 @pytest.mark.parametrize("payload", [
@@ -41,3 +42,10 @@ def test_v2_payload_accepts_normalized_fields():
 def test_invalid_versions_and_fields_are_rejected(payload):
     with pytest.raises(ValueError):
         parse_cleaned_document(payload)
+
+
+def test_content_hash_deduplication_is_stable_and_ignores_missing_hashes():
+    seen = set()
+    assert not is_duplicate_content("hash-a", seen)
+    assert is_duplicate_content("hash-a", seen)
+    assert not is_duplicate_content(None, seen)
