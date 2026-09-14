@@ -56,3 +56,10 @@ The Go service supports these environment variables:
 The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`. The
 current readiness endpoint is startup-level scaffolding; dependency health
 checks will be tightened as deployment integration is added.
+
+## Observability
+
+`GET /metrics` exposes request and result counters plus a request-duration
+histogram. Metrics intentionally have no query, URL, cursor, or other
+user-controlled labels. The histogram is suitable for Prometheus p50/p75/p90/
+p95/p99 calculations with `histogram_quantile`.
