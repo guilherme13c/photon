@@ -22,7 +22,7 @@ sleep 15
 
 echo "Creating Kafka topics..."
 docker exec -i tests-kafka-1 kafka-topics --create --topic fetched-pages --bootstrap-server localhost:9092 --if-not-exists || true
-docker exec -i tests-kafka-1 kafka-topics --create --topic urls --bootstrap-server localhost:9092 --if-not-exists || true
+docker exec -i tests-kafka-1 kafka-topics --create --topic discovered-urls --bootstrap-server localhost:9092 --if-not-exists || true
 docker exec -i tests-kafka-1 kafka-topics --create --topic cleaned_documents --bootstrap-server localhost:9092 --if-not-exists || true
 docker exec -i tests-kafka-1 kafka-topics --create --topic extractor-dlq --bootstrap-server localhost:9092 --if-not-exists || true
 
@@ -51,8 +51,8 @@ echo '{"url": "http://test-site.com", "s3_key": "e2e-payload.html"}' | docker ex
 echo "Waiting for message to be processed..."
 sleep 5
 
-echo "Verifying 'urls' topic output..."
-docker exec -i tests-kafka-1 kafka-console-consumer --bootstrap-server localhost:9092 --topic urls --from-beginning --max-messages 1 --timeout-ms 5000 > urls_output.txt || true
+echo "Verifying 'discovered-urls' topic output..."
+docker exec -i tests-kafka-1 kafka-console-consumer --bootstrap-server localhost:9092 --topic discovered-urls --from-beginning --max-messages 1 --timeout-ms 5000 > urls_output.txt || true
 
 echo "Verifying 'cleaned_documents' topic output..."
 docker exec -i tests-kafka-1 kafka-console-consumer --bootstrap-server localhost:9092 --topic cleaned_documents --from-beginning --max-messages 1 --timeout-ms 5000 > docs_output.txt || true
