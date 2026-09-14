@@ -16,4 +16,5 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 COPY src/ ./src/
 
 ENV PYTHONPATH=/app
+EXPOSE 8000 8002
 CMD ["python", "src/main.py"]

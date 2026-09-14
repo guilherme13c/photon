@@ -47,7 +47,7 @@ The Go service supports these environment variables:
 | Variable | Default | Purpose |
 |---|---|---|
 | `SEARCH_LISTEN_ADDR` | `:8082` | HTTP listen address. |
-| `SEARCH_EMBEDDER_URL` | `http://embedder:8000` | Internal embedding endpoint. |
+| `SEARCH_EMBEDDER_URL` | `http://embedder:8002` | Internal embedding endpoint. |
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant endpoint. |
 | `QDRANT_API_KEY` | empty | Optional Qdrant API key. |
 | `QDRANT_COLLECTION_NAME` | `photon_documents` | Vector collection. |

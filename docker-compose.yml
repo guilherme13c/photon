@@ -244,11 +244,36 @@ services:
       EMBED_BATCH_WAIT_MS: ${PHOTON_EMBED_BATCH_WAIT_MS:-25}
       EMBED_MAX_TEXT_CHARS: ${PHOTON_EMBED_MAX_TEXT_CHARS:-8192}
       PROMETHEUS_PORT: ${EMBEDDER_PROMETHEUS_PORT:-8000}
+      EMBEDDING_API_PORT: ${EMBEDDER_API_PORT:-8002}
     deploy:
       resources:
         limits:
           cpus: '1.0'
           memory: 2G
+
+  search:
+    build:
+      context: ./search
+    depends_on:
+      embedder:
+        condition: service_started
+      qdrant:
+        condition: service_started
+    environment:
+      SEARCH_LISTEN_ADDR: :8082
+      SEARCH_EMBEDDER_URL: http://embedder:8002
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      QDRANT_COLLECTION_NAME: ${QDRANT_COLLECTION_NAME:-photon_documents}
+      SEARCH_VECTOR_DIMENSIONS: ${SEARCH_VECTOR_DIMENSIONS:-384}
+    ports:
+      - "${SEARCH_PORT:-8082}:8082"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
   cleanup-worker:
     build:

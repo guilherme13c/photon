@@ -4,7 +4,7 @@ import "testing"
 
 func TestLoadConfigUsesDefaults(t *testing.T) {
 	config := LoadConfig(func(string) string { return "" })
-	if config.ListenAddr != ":8082" || config.EmbedderURL != "http://embedder:8000" || config.QdrantURL != "http://qdrant:6333" {
+	if config.ListenAddr != ":8082" || config.EmbedderURL != "http://embedder:8002" || config.QdrantURL != "http://qdrant:6333" {
 		t.Fatalf("LoadConfig() = %#v", config)
 	}
 	if config.QdrantCollection != "photon_documents" || config.VectorDimensions != 384 {

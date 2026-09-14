@@ -20,7 +20,7 @@ func LoadConfig(getenv func(string) string) Config {
 	}
 	return Config{
 		ListenAddr:       valueOr(getenv("SEARCH_LISTEN_ADDR"), ":8082"),
-		EmbedderURL:      valueOr(getenv("SEARCH_EMBEDDER_URL"), "http://embedder:8000"),
+		EmbedderURL:      valueOr(getenv("SEARCH_EMBEDDER_URL"), "http://embedder:8002"),
 		QdrantURL:        valueOr(getenv("QDRANT_URL"), "http://qdrant:6333"),
 		QdrantAPIKey:     getenv("QDRANT_API_KEY"),
 		QdrantCollection: valueOr(getenv("QDRANT_COLLECTION_NAME"), "photon_documents"),
