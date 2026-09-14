@@ -99,6 +99,10 @@ fn handleMetricsConnection(allocator: std.mem.Allocator, client: std.Io.net.Stre
         const html = service.html_processed_total.load(.monotonic);
         const urls = service.urls_extracted_total.load(.monotonic);
         const docs = service.documents_produced_total.load(.monotonic);
+        const rejected_empty = service.documents_rejected_empty_total.load(.monotonic);
+        const fallbacks = service.fallback_documents_total.load(.monotonic);
+        const input_bytes = service.input_html_bytes_total.load(.monotonic);
+        const cleaned_bytes = service.cleaned_text_bytes_total.load(.monotonic);
         const duration_buckets = service.process_duration_bucket_counts;
         const duration_count = service.process_duration_count.load(.monotonic);
         const duration_sum_seconds = @as(f64, @floatFromInt(service.process_duration_sum_ns.load(.monotonic))) / std.time.ns_per_s;
@@ -113,6 +117,18 @@ fn handleMetricsConnection(allocator: std.mem.Allocator, client: std.Io.net.Stre
             \\# HELP documents_produced_total Total documents produced
             \\# TYPE documents_produced_total counter
             \\documents_produced_total {}
+            \\# HELP documents_rejected_empty_total Documents rejected because no text was extracted
+            \\# TYPE documents_rejected_empty_total counter
+            \\documents_rejected_empty_total {}
+            \\# HELP fallback_documents_total Documents using lower-confidence full-body extraction
+            \\# TYPE fallback_documents_total counter
+            \\fallback_documents_total {}
+            \\# HELP input_html_bytes_total Total input HTML bytes processed
+            \\# TYPE input_html_bytes_total counter
+            \\input_html_bytes_total {}
+            \\# HELP cleaned_text_bytes_total Total normalized main-text bytes produced
+            \\# TYPE cleaned_text_bytes_total counter
+            \\cleaned_text_bytes_total {}
             \\# HELP extractor_process_duration_seconds End-to-end extractor message processing duration
             \\# TYPE extractor_process_duration_seconds histogram
             \\extractor_process_duration_seconds_bucket{{le="0.005"}} {}
@@ -130,7 +146,7 @@ fn handleMetricsConnection(allocator: std.mem.Allocator, client: std.Io.net.Stre
             \\
         ;
         const body = std.fmt.allocPrint(allocator, metrics_format, .{
-            html,                                 urls,                                 docs,
+            html,                                 urls,                                 docs,                                  rejected_empty,                        fallbacks,                              input_bytes,                         cleaned_bytes,
             duration_buckets[0].load(.monotonic), duration_buckets[1].load(.monotonic), duration_buckets[2].load(.monotonic),
             duration_buckets[3].load(.monotonic), duration_buckets[4].load(.monotonic), duration_buckets[5].load(.monotonic),
             duration_buckets[6].load(.monotonic), duration_buckets[7].load(.monotonic), duration_buckets[8].load(.monotonic),

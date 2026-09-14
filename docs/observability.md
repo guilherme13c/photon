@@ -30,7 +30,7 @@ Prometheus is configured with 9 scrape targets covering the full pipeline:
 | Frontier | Zig | 8080 | `/metrics` | `urls_ingested_total`, `urls_filtered_total`, `urls_deduped_total`, `frontier_admission_duration_seconds` |
 | Fetcher | Go | 2112 | `/metrics` | `fetcher_urls_processed_total{status}`, `fetcher_process_duration_seconds`, `fetcher_stage_duration_seconds{stage}`, `fetcher_in_flight` |
 | Renderer | Go | 3000 | `/metrics` | `renderer_pages_rendered_total{status}`, `renderer_process_duration_seconds`, `renderer_in_flight` |
-| Extractor | Zig | 8001 | `/metrics` | `html_processed_total`, `urls_extracted_total`, `documents_produced_total`, `extractor_process_duration_seconds` |
+| Extractor | Zig | 8001 | `/metrics` | `html_processed_total`, `urls_extracted_total`, `documents_produced_total`, `documents_rejected_empty_total`, `fallback_documents_total`, `input_html_bytes_total`, `cleaned_text_bytes_total`, `extractor_process_duration_seconds` |
 | Embedder | Python | 8000 | `/metrics` | `embedder_messages_processed_total{status}`, `embedder_batches_processed_total{status}`, `embedder_process_duration_seconds`, `embedder_stage_duration_seconds{stage}`, `embedder_in_flight` |
 
 ### Infrastructure

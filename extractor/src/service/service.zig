@@ -22,6 +22,10 @@ pub const Service = struct {
     html_processed_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     urls_extracted_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     documents_produced_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    documents_rejected_empty_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    fallback_documents_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    input_html_bytes_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    cleaned_text_bytes_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     process_duration_bucket_counts: [processing_latency_bucket_ns.len]std.atomic.Value(u64) = zeroLatencyBuckets(),
     process_duration_sum_ns: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     process_duration_count: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
@@ -48,6 +52,15 @@ pub const Service = struct {
             return;
         };
         defer parsed.deinit(self.allocator);
+
+        _ = self.input_html_bytes_total.fetchAdd(html.len, .monotonic);
+        _ = self.cleaned_text_bytes_total.fetchAdd(parsed.main_text.items.len, .monotonic);
+        if (parsed.quality_score < 0.8) _ = self.fallback_documents_total.fetchAdd(1, .monotonic);
+        if (parsed.main_text.items.len == 0) {
+            _ = self.documents_rejected_empty_total.fetchAdd(1, .monotonic);
+            std.log.info("Rejected empty document for URL {s}", .{url});
+            return;
+        }
 
         std.log.info("Extracted {} URLs", .{parsed.links.items.len});
         _ = self.urls_extracted_total.fetchAdd(parsed.links.items.len, .monotonic);

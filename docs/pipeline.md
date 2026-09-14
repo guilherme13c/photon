@@ -49,6 +49,7 @@ The `extractor` (Tier 1 Parser) processes the raw HTML coming from the Fetcher a
 - **Text Cleaning:** Strips HTML tags, styles, and scripts to extract clean text.
 - **Forwarding:** Publishes versioned cleaned documents and metadata to the `cleaned_documents` topic. The v2 contract reserves fields for canonical URL, main text, content hash, language, content type, and extraction quality; the Embedder accepts v1 during rollout.
 - **Deduplication:** Computes a deterministic hash of normalized main content. The Embedder uses this hash to suppress repeated content during a worker lifetime while retaining cleanup hand-off for every source object.
+- **Quality gates:** Empty extracted documents are rejected before publication. Pages that require full-body fallback remain publishable with a lower quality score, and extraction volume/fallback counters are exposed through Prometheus.
 - **Metrics:** Runs a dedicated HTTP server (configurable port via `PROMETHEUS_PORT`, default `8001`) exposing `html_processed_total`, `urls_extracted_total`, and `documents_produced_total`.
 
 ### 5. Accumulation Buffer (Kafka)
