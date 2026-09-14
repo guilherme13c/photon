@@ -5,12 +5,16 @@ pub const ParsedHtml = struct {
     language: []const u8,
     canonical_url: []const u8,
     text: std.ArrayList(u8),
+    main_text: std.ArrayList(u8),
     headings: std.ArrayList([]const u8),
     links: std.ArrayList([]const u8),
+    quality_score: f32,
+    content_type: []const u8,
 
     pub fn deinit(self: *ParsedHtml, allocator: std.mem.Allocator) void {
         if (self.title.len > 0) allocator.free(self.title);
         self.text.deinit(allocator);
+        self.main_text.deinit(allocator);
         self.headings.deinit(allocator);
         self.links.deinit(allocator);
     }
@@ -21,6 +25,8 @@ const block_tags = [_][]const u8{ "address", "article", "blockquote", "br", "div
 fn eq(tag: []const u8, expected: []const u8) bool { return std.ascii.eqlIgnoreCase(tag, expected); }
 fn isBlock(tag: []const u8) bool { for (block_tags) |item| if (eq(tag, item)) return true; return false; }
 fn isHeading(tag: []const u8) bool { return tag.len == 2 and tag[0] == 'h' and tag[1] >= '1' and tag[1] <= '6'; }
+fn isMainTag(tag: []const u8) bool { return eq(tag, "main") or eq(tag, "article"); }
+fn isBoilerplateTag(tag: []const u8) bool { return eq(tag, "nav") or eq(tag, "header") or eq(tag, "footer") or eq(tag, "aside"); }
 
 fn attributeValue(content: []const u8, wanted: []const u8) ?[]const u8 {
     var i: usize = 0;
@@ -92,10 +98,13 @@ fn tagEnd(html: []const u8, start: usize) usize {
 }
 
 pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
-    var result = ParsedHtml{ .title = "", .language = "", .canonical_url = "", .text = std.ArrayList(u8).empty, .headings = std.ArrayList([]const u8).empty, .links = std.ArrayList([]const u8).empty };
+    var result = ParsedHtml{ .title = "", .language = "", .canonical_url = "", .text = std.ArrayList(u8).empty, .main_text = std.ArrayList(u8).empty, .headings = std.ArrayList([]const u8).empty, .links = std.ArrayList([]const u8).empty, .quality_score = 0, .content_type = "document" };
     errdefer result.deinit(allocator);
     var ignored: usize = 0;
     var hidden: usize = 0;
+    var main_depth: usize = 0;
+    var boilerplate_depth: usize = 0;
+    var saw_main = false;
     var title_start: ?usize = null;
     var heading_start: ?usize = null;
     var i: usize = 0;
@@ -107,7 +116,10 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
         if (html[i] != '<') {
             const start = i;
             while (i < html.len and html[i] != '<') : (i += 1) {}
-            if (ignored == 0 and hidden == 0 and title_start == null) try appendText(&result.text, allocator, html[start..i]);
+            if (ignored == 0 and hidden == 0 and title_start == null) {
+                try appendText(&result.text, allocator, html[start..i]);
+                if (main_depth > 0 and boilerplate_depth == 0) try appendText(&result.main_text, allocator, html[start..i]);
+            }
             continue;
         }
         const end = tagEnd(html, i + 1);
@@ -123,6 +135,8 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
         const ignored_tag = eq(name, "script") or eq(name, "style") or eq(name, "noscript") or eq(name, "template") or eq(name, "svg");
         if (closing) {
             if (ignored_tag and ignored > 0) ignored -= 1;
+            if (isMainTag(name) and main_depth > 0) main_depth -= 1;
+            if (isBoilerplateTag(name) and boilerplate_depth > 0) boilerplate_depth -= 1;
             if ((hasAttribute(attrs, "hidden", null) or hasAttribute(attrs, "aria-hidden", "true")) and hidden > 0) hidden -= 1;
             if (eq(name, "title")) {
                 if (title_start) |start| {
@@ -134,7 +148,10 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
                 title_start = null;
             }
             if (isHeading(name)) { if (heading_start) |start| try result.headings.append(allocator, std.mem.trim(u8, html[start..i], " \t\r\n")); heading_start = null; }
-            if (isBlock(name) and ignored == 0 and hidden == 0) try blockBreak(&result.text, allocator);
+            if (isBlock(name) and ignored == 0 and hidden == 0) {
+                try blockBreak(&result.text, allocator);
+                if (main_depth > 0 and boilerplate_depth == 0) try blockBreak(&result.main_text, allocator);
+            }
         } else {
             if (eq(name, "html")) {
                 if (attributeValue(attrs, "lang")) |lang| result.language = lang;
@@ -146,12 +163,22 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
             if (isHeading(name)) heading_start = end + 1;
             if (eq(name, "a")) if (attributeValue(attrs, "href")) |href| try result.links.append(allocator, href);
             if (ignored_tag) ignored += 1;
+            if (isMainTag(name)) { main_depth += 1; saw_main = true; if (eq(name, "article")) result.content_type = "article"; }
+            if (isBoilerplateTag(name)) boilerplate_depth += 1;
             if (hasAttribute(attrs, "hidden", null) or hasAttribute(attrs, "aria-hidden", "true")) hidden += 1;
-            if (isBlock(name) and ignored == 0 and hidden == 0) try blockBreak(&result.text, allocator);
+            if (isBlock(name) and ignored == 0 and hidden == 0) {
+                try blockBreak(&result.text, allocator);
+                if (main_depth > 0 and boilerplate_depth == 0) try blockBreak(&result.main_text, allocator);
+            }
         }
         i = end + 1;
     }
     while (result.text.items.len > 0 and (result.text.getLast() == ' ' or result.text.getLast() == '\n')) _ = result.text.pop();
+    while (result.main_text.items.len > 0 and (result.main_text.getLast() == ' ' or result.main_text.getLast() == '\n')) _ = result.main_text.pop();
+    if (!saw_main or result.main_text.items.len == 0) {
+        try result.main_text.appendSlice(allocator, result.text.items);
+        result.quality_score = 0.5;
+    } else result.quality_score = 0.9;
     return result;
 }
 
@@ -172,4 +199,13 @@ test "parseHtml tolerates comments, malformed tags, and quoted greater-than char
     defer parsed.deinit(allocator);
     try std.testing.expect(std.mem.indexOf(u8, parsed.text.items, "Still text") != null);
     try std.testing.expect(std.mem.indexOf(u8, parsed.text.items, "next") != null);
+}
+
+test "parseHtml selects main content and excludes semantic boilerplate" {
+    const allocator = std.testing.allocator;
+    var parsed = try parseHtml(allocator, "<body><header>Brand</header><main><nav>Sections</nav><article><h1>Guide</h1><p>Useful content.</p></article></main><footer>Copyright</footer></body>");
+    defer parsed.deinit(allocator);
+    try std.testing.expectEqualStrings("Guide\nUseful content.", parsed.main_text.items);
+    try std.testing.expectEqualStrings("article", parsed.content_type);
+    try std.testing.expect(parsed.quality_score > 0.8);
 }
