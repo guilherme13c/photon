@@ -6,6 +6,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from sentence_transformers import SentenceTransformer
 from src.repository.vector_store import VectorStoreRepository
 from src.service.contracts import is_duplicate_content, parse_cleaned_document
+from src.service.chunking import chunk_text
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class EmbeddingProcessorService:
         producer=None,
         batch_size: int = 32,
         max_text_chars: int = 8192,
+        chunk_max_tokens: int = 450,
+        chunk_overlap_tokens: int = 60,
     ):
         logger.info(f"Loading SentenceTransformer model '{model_name}'...")
         self.model = SentenceTransformer(model_name)
@@ -46,6 +49,8 @@ class EmbeddingProcessorService:
         self.batch_size = batch_size
         self.max_text_chars = max_text_chars
         self.seen_content_hashes: set[str] = set()
+        self.chunk_max_tokens = chunk_max_tokens
+        self.chunk_overlap_tokens = chunk_overlap_tokens
         logger.info("Model loaded.")
 
     def process_message(self, message: bytes):
@@ -100,6 +105,18 @@ class EmbeddingProcessorService:
                     embeddings_processed_total.labels(status="decode_error").inc()
                     if self.producer:
                         self.producer.publish_dead_letter("unknown", str(exc))
+
+            chunk_documents = []
+            for document in documents:
+                chunks = chunk_text(document["text"], self.chunk_max_tokens, self.chunk_overlap_tokens)
+                for chunk_index, chunk in enumerate(chunks):
+                    chunk_documents.append({
+                        **document,
+                        "text": chunk,
+                        "chunk_index": chunk_index,
+                        "chunk_count": len(chunks),
+                    })
+            documents = chunk_documents
 
             if documents:
                 model_inputs = [

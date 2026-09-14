@@ -53,9 +53,14 @@ class VectorStoreRepository:
         points = []
         for document, embedding in zip(documents, embeddings, strict=True):
             points.append(models.PointStruct(
-                id=str(uuid.uuid5(uuid.NAMESPACE_URL, document["url"])),
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, document["url"] + f"#chunk:{document.get('chunk_index', 0)}")),
                 vector=embedding.tolist() if hasattr(embedding, "tolist") else embedding,
-                payload={"url": document["url"], "title": document["title"], "text": document["text"]},
+                payload={
+                    "url": document["url"], "title": document["title"], "text": document["text"],
+                    "chunk_index": document.get("chunk_index", 0),
+                    "chunk_count": document.get("chunk_count", 1),
+                    "content_hash": document.get("content_hash"),
+                },
             ))
         if points:
             self.client.upsert(collection_name=self.collection_name, points=points, wait=True)

@@ -24,6 +24,8 @@ class EmbedderWorker:
         self.processor = EmbeddingProcessorService(
             config.model_name, self.vector_store, self.producer,
             batch_size=config.batch_size, max_text_chars=config.max_text_chars,
+            chunk_max_tokens=config.chunk_max_tokens,
+            chunk_overlap_tokens=config.chunk_overlap_tokens,
         )
         self.consumer = KafkaConsumerRepository(
             broker=config.kafka_broker,

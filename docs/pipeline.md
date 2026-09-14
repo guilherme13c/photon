@@ -60,6 +60,7 @@ The final stage (Tier 3 ML Batch Processor) handles machine learning inference.
   `cleaned_documents` topic, encodes them together, and submits one Qdrant
   upsert. Offsets commit only after Qdrant and the cleanup hand-off succeed.
 - **Vectorization:** Runs dense embedding models (e.g., Sentence Transformers, ONNX Runtime) to convert text into vector embeddings.
+- **Chunking:** Splits normalized main text on paragraph boundaries into bounded, overlapping chunks before model inference; each chunk is stored with its source URL and position.
 - **Storage:** Upserts the generated vectors and associated metadata directly into a Vector Database (like **Qdrant**).
 - **Execution:** One model per process; scale with standard service replicas in
   the shared Kafka consumer group. This matches Kafka partition assignment and

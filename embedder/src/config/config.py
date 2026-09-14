@@ -13,6 +13,8 @@ class Config:
         # This is a safety bound for tokenizer CPU and memory. SentenceTransformer
         # applies its own token bound afterwards.
         self.max_text_chars = int(os.getenv("EMBED_MAX_TEXT_CHARS", "8192"))
+        self.chunk_max_tokens = int(os.getenv("EMBED_CHUNK_MAX_TOKENS", "450"))
+        self.chunk_overlap_tokens = int(os.getenv("EMBED_CHUNK_OVERLAP_TOKENS", "60"))
         self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key = os.getenv("QDRANT_API_KEY", "")
         self.qdrant_collection_name = os.getenv("QDRANT_COLLECTION_NAME", "photon_documents")
