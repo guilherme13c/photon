@@ -104,7 +104,6 @@ Key environment variables:
 | `PROMETHEUS_PORT` | `9090` | Prometheus host port |
 | `FETCHER_PROMETHEUS_PORT` | `2112` | Fetcher metrics port |
 | `EMBEDDER_PROMETHEUS_PORT` | `8000` | Embedder metrics port |
-| `EMBEDDER_API_PORT` | `8002` | Internal Embedder query-inference port |
 | `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor metrics port |
 | `SEARCH_PORT` | `8082` | Search API port |
 
