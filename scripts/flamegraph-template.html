@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Photon service flame graph</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.css">
+<style>body{margin:0;font-family:system-ui,sans-serif}#chart{padding:16px}</style>
+<div id="chart"></div>
+<script src="https://d3js.org/d3.v7.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-flame-graph@4.1.3/dist/d3-flamegraph.min.js"></script>
+<script>
+const stacks = [/** @flamegraph_json **/];
+const options = /** @options_json **/;
+d3.select('#chart').datum(stacks).call(flamegraph().width(window.innerWidth - 32));
+</script>

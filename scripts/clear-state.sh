@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source "$(dirname "$0")/test-harness.sh"
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ if [[ $# -ne 1 || "$1" != "--yes" ]]; then
   usage >&2
   exit 2
 fi
+redirect_stdout_to_artifact clear-state.stdout.log
 
 state_dirs=(
   kafka_data

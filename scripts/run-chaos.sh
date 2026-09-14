@@ -6,8 +6,9 @@ if [[ "${PHOTON_ALLOW_CHAOS:-}" != "1" ]]; then
   exit 2
 fi
 source "$(dirname "$0")/test-harness.sh"
+redirect_stdout_to_artifact chaos.stdout.log
 trap cleanup_compose EXIT
-compose -f docker-compose.yml up --build -d
+compose -f docker-compose.yml up --build -d > "$PHOTON_ARTIFACT_DIR/docker-build.log" 2>&1
 wait_for_http http://localhost:8080/health 120
 
 for service in redis kafka minio qdrant fetcher renderer extractor embedder; do

@@ -2,9 +2,10 @@
 # Controlled-origin acceptance runner. Public-web traffic is never generated here.
 set -euo pipefail
 source "$(dirname "$0")/test-harness.sh"
+redirect_stdout_to_artifact functional-test.stdout.log
 trap cleanup_compose EXIT
 
-compose -f docker-compose.yml --profile test up --build -d
+compose -f docker-compose.yml --profile test up --build -d > "$PHOTON_ARTIFACT_DIR/docker-build.log" 2>&1
 wait_for_http http://localhost:8080/health 120
 wait_for_http http://localhost:8080/metrics 30
 wait_for_http http://localhost:18088/__requests 30

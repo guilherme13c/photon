@@ -1,0 +1,68 @@
+# Benchmark-only state and network override. Keep ordinary development bind
+# mounts intact, while every authoritative benchmark begins with empty
+# Docker-managed storage.
+#
+# The workload deliberately uses origin-0 through origin-17 as different
+# logical hosts. Docker's embedded DNS has occasionally failed to resolve one
+# of those aliases while a benchmark is scaling services, turning a crawler
+# result into a Docker-DNS measurement.  Give the one fixture origin a stable
+# private address and add explicit per-service host mappings instead.  URLs
+# retain their distinct host names (and therefore exercise Frontier's host
+# scheduler); they simply terminate at one controlled server.
+x-benchmark-origin-hosts: &benchmark-origin-hosts
+  - "origin-0:172.30.0.10"
+  - "origin-1:172.30.0.10"
+  - "origin-2:172.30.0.10"
+  - "origin-3:172.30.0.10"
+  - "origin-4:172.30.0.10"
+  - "origin-5:172.30.0.10"
+  - "origin-6:172.30.0.10"
+  - "origin-7:172.30.0.10"
+  - "origin-8:172.30.0.10"
+  - "origin-9:172.30.0.10"
+  - "origin-10:172.30.0.10"
+  - "origin-11:172.30.0.10"
+  - "origin-12:172.30.0.10"
+  - "origin-13:172.30.0.10"
+  - "origin-14:172.30.0.10"
+  - "origin-15:172.30.0.10"
+  - "origin-16:172.30.0.10"
+  - "origin-17:172.30.0.10"
+
+services:
+  origin:
+    networks:
+      default:
+        ipv4_address: 172.30.0.10
+
+  # Frontier retrieves robots.txt during admission; Fetcher and Renderer make
+  # the actual origin requests.  They must resolve the exact same fixture IP.
+  frontier:
+    extra_hosts: *benchmark-origin-hosts
+  admission-worker:
+    extra_hosts: *benchmark-origin-hosts
+  fetcher:
+    extra_hosts: *benchmark-origin-hosts
+  renderer:
+    extra_hosts: *benchmark-origin-hosts
+
+  minio:
+    volumes:
+      - benchmark_minio_data:/data
+  qdrant:
+    volumes:
+      - benchmark_qdrant_data:/qdrant/storage
+  redis:
+    volumes:
+      - benchmark_redis_data:/data
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  benchmark_minio_data:
+  benchmark_qdrant_data:
+  benchmark_redis_data:

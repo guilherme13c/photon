@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "seed": 20260912,
+  "purpose": "Controlled-origin mixed crawl used for reproducible Photon benchmarks",
+  "warmup_seconds": 15,
+  "measurement_seconds": 60,
+  "arrival_rate_per_second": 20,
+  "profiles": {
+    "baseline": {"url_count": 120, "arrival_rate_per_second": 10},
+    "load": {"url_count": 600, "arrival_rate_per_second": 40},
+    "spike": {"url_count": 1000, "arrival_rate_per_second": 250},
+    "stress": {"url_count": 3000, "arrival_rate_per_second": 100},
+    "volume": {"url_count": 10000, "arrival_rate_per_second": 80}
+  },
+  "mix": {
+    "static": 45,
+    "dynamic": 15,
+    "redirect": 10,
+    "slow": 10,
+    "blocked": 5,
+    "small": 5,
+    "medium": 5,
+    "large": 5
+  },
+  "host_distribution": {"hot_hosts": 2, "cold_hosts": 18, "hot_share_percent": 70},
+  "duplicate_percent": 15,
+  "crawl_delay_ms": 1000
+}

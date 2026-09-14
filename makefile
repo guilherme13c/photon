@@ -1,4 +1,4 @@
-.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder
+.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder
 
 build: build-frontier build-extractor build-fetcher build-renderer
 
@@ -61,6 +61,26 @@ test-capacity:
 
 test-chaos:
 	bash scripts/run-chaos.sh
+
+# Report-only benchmarking is intentionally opt-in and staging-only. The smoke
+# target has no Docker/network dependency and is suitable for PR validation.
+benchmark-smoke:
+	python3 -m unittest tests/performance/test_benchmark_lib.py
+
+benchmark-functions:
+	python3 scripts/run-benchmarks.py function
+
+benchmark-services:
+	python3 scripts/run-benchmarks.py service
+
+benchmark-e2e:
+	python3 scripts/run-benchmarks.py e2e
+
+benchmark:
+	bash scripts/run-benchmark-suite.sh
+
+benchmark-flamegraphs:
+	@bash scripts/run-flamegraph-suite.sh
 
 test-frontier:
 	cd frontier && zig build test --summary all

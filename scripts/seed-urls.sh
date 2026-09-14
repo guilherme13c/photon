@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source "$(dirname "$0")/test-harness.sh"
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 corpus_file="${CORPUS_FILE:-${script_dir}/../corpus.txt}"
@@ -65,6 +66,7 @@ if [[ ${#urls[@]} -eq 0 ]]; then
   exit 1
 fi
 
+redirect_stdout_to_artifact seed-urls.stdout.log
 payload='{"urls":['
 for index in "${!urls[@]}"; do
   (( index > 0 )) && payload+=','

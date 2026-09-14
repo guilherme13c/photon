@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source "$(dirname "$0")/test-harness.sh"
 
 usage() {
   cat <<'EOF'
@@ -27,4 +28,5 @@ if ! docker compose config --services | grep -Fxq "$service"; then
   exit 2
 fi
 
+redirect_stdout_to_artifact run-service.stdout.log
 docker compose up -d --build --scale "${service}=1" "$service"

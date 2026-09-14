@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+source "$(dirname "$0")/test-harness.sh"
 
 render=1
 
@@ -33,6 +34,7 @@ for arg in "$@"; do
   esac
 done
 
+redirect_stdout_to_artifact run-system.stdout.log
 if [[ "$render" -eq 1 ]]; then
   docker compose up -d --build --scale renderer=1
   exit 0
