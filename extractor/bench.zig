@@ -12,8 +12,7 @@ pub fn main() !void {
     for (0..iterations) |_| {
         var parsed = try parser.parseHtml(allocator, html);
         links += parsed.links.items.len;
-        parsed.text.deinit(allocator);
-        parsed.links.deinit(allocator);
+        parsed.deinit(allocator);
     }
     const elapsed_ns = started.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds();
     const ops_per_second = @as(f64, @floatFromInt(iterations)) * @as(f64, std.time.ns_per_s) / @as(f64, @floatFromInt(elapsed_ns));

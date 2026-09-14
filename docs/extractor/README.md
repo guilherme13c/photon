@@ -6,7 +6,7 @@ The Extractor is a high-throughput, memory-efficient microservice written in Zig
 
 1. **HTML Parsing & Link Discovery:** Parses raw HTML pages, extracts all `<a href="...">` attributes, and routes them back to the Frontier's `urls` Kafka topic.
 2. **Text Cleaning:** Strips `<script>`, `<style>`, and other non-content tags from the HTML to produce a clean textual representation of the page.
-3. **Document Publishing:** Formats the title, URL, cleaned text, and S3 key into a JSON payload and streams it to the `cleaned_documents` Kafka topic.
+3. **Document Publishing:** Formats the title, URL, detected language, canonical URL, cleaned text, and S3 key into a JSON payload and streams it to the `cleaned_documents` Kafka topic.
 4. **Dead-Letter Handling:** Any message that fails parsing, HTTP retrieval, or serialization is routed to the `extractor-dlq` Kafka topic with a reason string.
 
 ## Technical Details

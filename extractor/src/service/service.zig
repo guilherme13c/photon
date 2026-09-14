@@ -47,8 +47,7 @@ pub const Service = struct {
             self.producer.publishDeadLetter(url, "Failed to parse HTML") catch {};
             return;
         };
-        defer parsed.text.deinit(self.allocator);
-        defer parsed.links.deinit(self.allocator);
+        defer parsed.deinit(self.allocator);
 
         std.log.info("Extracted {} URLs", .{parsed.links.items.len});
         _ = self.urls_extracted_total.fetchAdd(parsed.links.items.len, .monotonic);
@@ -73,6 +72,8 @@ pub const Service = struct {
         const Doc = struct {
             url: []const u8,
             title: []const u8,
+            language: []const u8,
+            canonical_url: []const u8,
             text: []const u8,
             s3_key: []const u8,
             pipeline_started_at_ms: ?i64,
@@ -81,6 +82,8 @@ pub const Service = struct {
         const doc = Doc{
             .url = url,
             .title = parsed.title,
+            .language = parsed.language,
+            .canonical_url = parsed.canonical_url,
             .text = parsed.text.items,
             .s3_key = s3_key,
             .pipeline_started_at_ms = pipeline_started_at_ms,
