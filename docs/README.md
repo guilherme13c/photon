@@ -6,6 +6,7 @@
 | [Pipeline](pipeline.md) | Stage-by-stage pipeline overview. |
 | [Observability](observability.md) | Prometheus, Grafana, and operational diagnostics. |
 | [Testing](testing.md) | Local, CI, staging, resilience, and performance test tiers. |
+| [Search](search.md) | Search API request, response, and pagination contract. |
 | [Architecture diagram](architecture-assets/photon-system-architecture.html) | Interactive Archify component diagram. |
 | [Archify evidence](architecture-assets/photon-system-architecture.visual-check.html) | Generated browser containment evidence for the diagram. |
 
