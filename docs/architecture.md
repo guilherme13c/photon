@@ -98,9 +98,11 @@ replicas, without adding host labels to Prometheus.
 The same admission transaction writes `frontier:{shard}:url:{hash}` with a
 next-crawl expiry. A duplicate arriving before that expiry returns
 `duplicate`, creates no queue entry, and increments the Frontier dedupe
-counter. The canonical URL removes fragments and is lower-cased by the current
-normalizer; deduplication is URL-level, not content-level or canonical-link
-equivalence.
+counter. The canonical URL removes fragments, lower-cases the scheme and
+authority only, removes HTTP/HTTPS default ports, and drops known tracking
+parameters (`utm_*`, `fbclid`, `gclid`, and related identifiers) while
+preserving content-bearing path and query values. Deduplication is URL-level,
+not content-level or canonical-link equivalence.
 
 This is deliberately an **admission** guarantee. It prevents duplicate queued
 work, but a Kafka retry can still cause a worker to process a record again.
