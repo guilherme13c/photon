@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +14,18 @@ type roundTripFunc func(*http.Request) *http.Response
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request), nil
+}
+
+func TestHTTPEmbedderReadyChecksHealthEndpoint(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) *http.Response {
+		if r.Method != http.MethodGet || r.URL.Path != "/healthz" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(nil))}
+	})}
+	if !newHTTPEmbedder("http://embedding", 2, client).Ready(context.Background()) {
+		t.Fatal("Ready() = false")
+	}
 }
 
 func TestHTTPEmbedderSendsTextAndReturnsVectors(t *testing.T) {

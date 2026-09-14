@@ -87,6 +87,22 @@ func (q *QdrantRepository) Search(ctx context.Context, vector []float32, limit, 
 	return results, nil
 }
 
+func (q *QdrantRepository) Ready(ctx context.Context) bool {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, q.baseURL+"/collections/"+q.collection, nil)
+	if err != nil {
+		return false
+	}
+	if q.apiKey != "" {
+		request.Header.Set("api-key", q.apiKey)
+	}
+	response, err := q.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	return response.StatusCode >= 200 && response.StatusCode < 300
+}
+
 func qdrantID(raw json.RawMessage) (string, error) {
 	var stringID string
 	if json.Unmarshal(raw, &stringID) == nil {

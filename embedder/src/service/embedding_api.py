@@ -4,6 +4,12 @@ from http.server import BaseHTTPRequestHandler
 
 def make_handler(model):
     class EmbeddingHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/healthz":
+                self._write(200, {"status": "ok"})
+            else:
+                self._write(404, {"error": "not found"})
+
         def do_POST(self):
             if self.path != "/v1/embed":
                 self._write(404, {"error": "not found"})

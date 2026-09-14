@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -72,4 +73,17 @@ func (e *HTTPEmbedder) Embed(text string) ([]float32, error) {
 		return nil, fmt.Errorf("embedding dimension mismatch: got %d, want %d", len(vector), e.dimensions)
 	}
 	return vector, nil
+}
+
+func (e *HTTPEmbedder) Ready(ctx context.Context) bool {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, e.baseURL+"/healthz", nil)
+	if err != nil {
+		return false
+	}
+	response, err := e.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	return response.StatusCode >= 200 && response.StatusCode < 300
 }

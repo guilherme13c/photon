@@ -45,3 +45,15 @@ func TestQdrantRepositorySearchReportsBackendErrors(t *testing.T) {
 		t.Fatal("Search() unexpectedly succeeded")
 	}
 }
+
+func TestQdrantRepositoryReadyChecksCollection(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) *http.Response {
+		if r.Method != http.MethodGet || r.URL.Path != "/collections/docs" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(nil))}
+	})}
+	if !NewQdrantRepository("http://qdrant", "docs", "", client).Ready(context.Background()) {
+		t.Fatal("Ready() = false")
+	}
+}
