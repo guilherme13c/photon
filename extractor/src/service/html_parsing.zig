@@ -97,6 +97,52 @@ fn tagEnd(html: []const u8, start: usize) usize {
     return html.len;
 }
 
+fn normalizeText(allocator: std.mem.Allocator, input: []const u8) !std.ArrayList(u8) {
+    var output = std.ArrayList(u8).empty;
+    errdefer output.deinit(allocator);
+    var i: usize = 0;
+    var pending_space = false;
+    while (i < input.len) : (i += 1) {
+        const c = input[i];
+        if (c >= 0x80) {
+            const sequence_len = std.unicode.utf8ByteSequenceLength(c) catch 0;
+            if (sequence_len == 0 or i + sequence_len > input.len or !std.unicode.utf8ValidateSlice(input[i .. i + sequence_len])) {
+                if (pending_space and output.items.len > 0 and output.getLast() != '\n') try output.append(allocator, ' ');
+                pending_space = false;
+                try output.appendSlice(allocator, "\xEF\xBF\xBD");
+            } else {
+                if (pending_space and output.items.len > 0 and output.getLast() != '\n') try output.append(allocator, ' ');
+                pending_space = false;
+                try output.appendSlice(allocator, input[i .. i + sequence_len]);
+                i += sequence_len - 1;
+            }
+            continue;
+        }
+        if (c == ' ' or c == '\t' or c == '\r') { pending_space = true; continue; }
+        if (c == '\n') {
+            while (output.items.len > 0 and output.getLast() == ' ') _ = output.pop();
+            if (output.items.len > 0 and output.getLast() != '\n') try output.append(allocator, '\n');
+            pending_space = false;
+            continue;
+        }
+        if (pending_space and output.items.len > 0 and output.getLast() != '\n') try output.append(allocator, ' ');
+        pending_space = false;
+        try output.append(allocator, c);
+    }
+    while (output.items.len > 0 and (output.getLast() == ' ' or output.getLast() == '\n')) _ = output.pop();
+
+    // Join words split by a line-wrap hyphen, but preserve intentional hyphens.
+    i = 1;
+    while (i + 1 < output.items.len) : (i += 1) {
+        if (output.items[i] == '-' and output.items[i + 1] == '\n' and std.ascii.isAlphanumeric(output.items[i - 1])) {
+            _ = output.orderedRemove(i + 1);
+            _ = output.orderedRemove(i);
+            i -= 1;
+        }
+    }
+    return output;
+}
+
 pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
     var result = ParsedHtml{ .title = "", .language = "", .canonical_url = "", .text = std.ArrayList(u8).empty, .main_text = std.ArrayList(u8).empty, .headings = std.ArrayList([]const u8).empty, .links = std.ArrayList([]const u8).empty, .quality_score = 0, .content_type = "document" };
     errdefer result.deinit(allocator);
@@ -175,6 +221,12 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
     }
     while (result.text.items.len > 0 and (result.text.getLast() == ' ' or result.text.getLast() == '\n')) _ = result.text.pop();
     while (result.main_text.items.len > 0 and (result.main_text.getLast() == ' ' or result.main_text.getLast() == '\n')) _ = result.main_text.pop();
+    const normalized_text = try normalizeText(allocator, result.text.items);
+    result.text.deinit(allocator);
+    result.text = normalized_text;
+    const normalized_main = try normalizeText(allocator, result.main_text.items);
+    result.main_text.deinit(allocator);
+    result.main_text = normalized_main;
     if (!saw_main or result.main_text.items.len == 0) {
         try result.main_text.appendSlice(allocator, result.text.items);
         result.quality_score = 0.5;
@@ -208,4 +260,25 @@ test "parseHtml selects main content and excludes semantic boilerplate" {
     try std.testing.expectEqualStrings("Guide\nUseful content.", parsed.main_text.items);
     try std.testing.expectEqualStrings("article", parsed.content_type);
     try std.testing.expect(parsed.quality_score > 0.8);
+}
+
+test "normalizeText collapses whitespace and trims block boundaries" {
+    const allocator = std.testing.allocator;
+    var normalized = try normalizeText(allocator, "  One \t two  \n\n Three \r\n");
+    defer normalized.deinit(allocator);
+    try std.testing.expectEqualStrings("One two\nThree", normalized.items);
+}
+
+test "normalizeText joins a line-wrapped word" {
+    const allocator = std.testing.allocator;
+    var normalized = try normalizeText(allocator, "hyphen-\nated");
+    defer normalized.deinit(allocator);
+    try std.testing.expectEqualStrings("hyphenated", normalized.items);
+}
+
+test "normalizeText replaces invalid UTF-8 bytes" {
+    const allocator = std.testing.allocator;
+    var normalized = try normalizeText(allocator, "good\xfftext");
+    defer normalized.deinit(allocator);
+    try std.testing.expectEqualStrings("good�text", normalized.items);
 }
