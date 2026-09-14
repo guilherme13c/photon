@@ -53,5 +53,6 @@ The Go service supports these environment variables:
 | `QDRANT_COLLECTION_NAME` | `photon_documents` | Vector collection. |
 | `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
 
-The service skeleton exposes `GET /healthz` and `GET /readyz`. Search routes
-and dependency-backed readiness are added in later implementation slices.
+The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`. The
+current readiness endpoint is startup-level scaffolding; dependency health
+checks will be tightened as deployment integration is added.

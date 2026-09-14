@@ -18,6 +18,10 @@ type QdrantRepository struct {
 	client     *http.Client
 }
 
+type SearchRepository interface {
+	Search(ctx context.Context, vector []float32, limit, offset int) ([]SearchResult, error)
+}
+
 type qdrantQueryRequest struct {
 	Vector      []float32 `json:"query"`
 	Limit       int       `json:"limit"`
