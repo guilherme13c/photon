@@ -1,6 +1,6 @@
-.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
+.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker build-search run-frontier run-extractor run-fetcher run-renderer run-embedder run-search test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-search test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 
-build: build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker
+build: build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker build-search
 
 build-frontier:
 	cd frontier && zig build
@@ -16,6 +16,9 @@ build-renderer:
 
 build-cleanup-worker:
 	cd cleanup-worker && zig build
+
+build-search:
+	cd search && go build ./cmd/search
 
 run: run-frontier run-extractor run-fetcher run-renderer run-embedder
 
@@ -34,7 +37,10 @@ run-renderer:
 run-embedder:
 	cd embedder && . ../.venv/bin/activate && PYTHONPATH=. python -m src.main
 
-test: test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker
+run-search:
+	cd search && go run ./cmd/search
+
+test: test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-search
 
 # The PR-fast gate contains no Docker or public-network dependency.
 test-fast: test test-contracts test-simulation test-fuzz
@@ -102,6 +108,9 @@ test-embedder:
 
 test-cleanup-worker:
 	cd cleanup-worker && zig build test --summary all
+
+test-search:
+	cd search && GOCACHE=/tmp/photon-go-build-cache go test ./...
 
 clean: clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 

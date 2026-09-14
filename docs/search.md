@@ -39,3 +39,19 @@ process ensures indexing and search use the same model and normalization.
 normalized query; using one with another query is invalid. The cursor encodes
 an offset for the service and must not be interpreted or constructed by a
 client.
+
+## Service configuration
+
+The Go service supports these environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SEARCH_LISTEN_ADDR` | `:8082` | HTTP listen address. |
+| `SEARCH_EMBEDDER_URL` | `http://embedder:8000` | Internal embedding endpoint. |
+| `QDRANT_URL` | `http://qdrant:6333` | Qdrant endpoint. |
+| `QDRANT_API_KEY` | empty | Optional Qdrant API key. |
+| `QDRANT_COLLECTION_NAME` | `photon_documents` | Vector collection. |
+| `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
+
+The service skeleton exposes `GET /healthz` and `GET /readyz`. Search routes
+and dependency-backed readiness are added in later implementation slices.
