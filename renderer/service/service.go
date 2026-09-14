@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/guilherme13c/renderer/repository/headless_client"
 	"github.com/guilherme13c/renderer/repository/kafka/consumer"
@@ -18,6 +19,13 @@ var (
 		Name: "renderer_pages_rendered_total",
 		Help: "The total number of pages rendered",
 	}, []string{"status"})
+	renderDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: "renderer_process_duration_seconds", Help: "End-to-end Renderer message processing duration",
+		Buckets: prometheus.DefBuckets,
+	})
+	renderInFlight = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "renderer_in_flight", Help: "Renderer messages currently being processed",
+	})
 )
 
 type Service struct {
@@ -37,6 +45,9 @@ func NewService(client headless_client.Client, st storage.Storage, pr producer.P
 }
 
 func (s *Service) Process(ctx context.Context, msg consumer.Message) {
+	started := time.Now()
+	renderInFlight.Inc()
+	defer func() { renderInFlight.Dec(); renderDuration.Observe(time.Since(started).Seconds()) }()
 	url := string(msg.Value)
 	log.Printf("Fetching URL: %s", url)
 
@@ -62,11 +73,13 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) {
 
 	// 3. Produce the same storage reference envelope consumed by the extractor.
 	payload, err := json.Marshal(struct {
-		URL   string `json:"url"`
-		S3Key string `json:"s3_key"`
+		URL                 string `json:"url"`
+		S3Key               string `json:"s3_key"`
+		PipelineStartedAtMS int64  `json:"pipeline_started_at_ms"`
 	}{
-		URL:   url,
-		S3Key: s3Key,
+		URL:                 url,
+		S3Key:               s3Key,
+		PipelineStartedAtMS: started.UnixMilli(),
 	})
 	if err != nil {
 		log.Printf("Failed to marshal message for %s: %v", url, err)

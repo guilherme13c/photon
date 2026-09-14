@@ -16,7 +16,8 @@ The pipeline is structured into multiple decoupled tiers:
 
 ### 1. Ingestion & Frontier (Zig)
 The `frontier` is the central coordinator for URL management, built for extreme throughput and low latency.
-- **Ingestion:** Receives new URLs through a REST API (`/ingest`).
+- **Ingestion:** The Frontier Manager receives URLs through `/ingest` and
+  persists candidates to Kafka; admission-worker replicas consume that stream.
 - **Deduplication:** Utilizes Redis to track visited URLs to avoid redundant crawling.
 - **Rate Limiting (Politeness):** Uses Redis-backed, atomic per-host request-slot reservations and cached robots policy. See [Architecture](architecture.md#politeness).
 - **Dispatching:** Pushes clean, ready-to-crawl URLs to the Kafka `urls` topic.
@@ -29,7 +30,7 @@ The `fetcher` is a highly concurrent service responsible for downloading the HTM
 - **Dynamic Heuristic Engine:** Analyzes raw HTML snippets (e.g., `<div id="root">`, `__NEXT_DATA__`) to determine if the page requires JavaScript execution.
 - **Routing:**
   - *Static pages:* The HTML is saved to MinIO, and a payload containing `s3_key` is published to the `fetched-pages` topic.
-  - *Dynamic pages:* The URL returns to `frontier-ingest` as `render:<url>` so the Renderer receives a second polite host slot through `dynamic-urls`.
+  - *Dynamic pages:* The URL returns to `discovered-urls` as `render:<url>` so the Renderer receives a second polite host slot through `dynamic-urls`.
 - **Metrics:** Exposes `/metrics` via `promhttp` (configurable port via `PROMETHEUS_PORT`, default `2112`) with `fetcher_urls_processed_total` counter by status.
 
 ### 3. Rendering Modern Web Apps (Go)
@@ -44,7 +45,7 @@ The `renderer` specifically targets Single Page Applications (SPAs) and heavy Ja
 ### 4. Parsing & Link Extraction (Zig)
 The `extractor` (Tier 1 Parser) processes the raw HTML coming from the Fetcher and Renderer.
 - **Input:** Consumes JSON payloads from the `fetched-pages` topic and retrieves the corresponding raw HTML from MinIO using the provided `s3_key`.
-- **Link Extraction:** Parses `href` attributes and publishes discovered links to its configured URL topic. The default `urls` topic bypasses Frontier admission; see the [feedback-loop limitation](architecture.md#current-feedback-loop-limitation) before enabling recrawl.
+- **Link Extraction:** Parses `href` attributes and publishes discovered links to `discovered-urls`, which is consumed by scalable admission workers before crawl dispatch.
 - **Text Cleaning:** Strips HTML tags, styles, and scripts to extract clean text.
 - **Forwarding:** Publishes cleaned documents and metadata to the `cleaned_documents` topic.
 - **Metrics:** Runs a dedicated HTTP server (configurable port via `PROMETHEUS_PORT`, default `8001`) exposing `html_processed_total`, `urls_extracted_total`, and `documents_produced_total`.
@@ -52,24 +53,35 @@ The `extractor` (Tier 1 Parser) processes the raw HTML coming from the Fetcher a
 ### 5. Accumulation Buffer (Kafka)
 The `cleaned_documents` topic acts as a durable buffer (Tier 2). It absorbs spikes in crawling and parsing, matching the high throughput of the crawler to the slower pace of the ML embedding process.
 
-### 6. Embedding Generation (Ray / Python)
+### 6. Embedding Generation (Python)
 The final stage (Tier 3 ML Batch Processor) handles machine learning inference.
-- **Batching:** Reads batches of documents from `cleaned_documents`.
+- **Batching:** Reads bounded batches of documents from the 12-partition
+  `cleaned_documents` topic, encodes them together, and submits one Qdrant
+  upsert. Offsets commit only after Qdrant and the cleanup hand-off succeed.
 - **Vectorization:** Runs dense embedding models (e.g., Sentence Transformers, ONNX Runtime) to convert text into vector embeddings.
 - **Storage:** Upserts the generated vectors and associated metadata directly into a Vector Database (like **Qdrant**).
-- **Execution Modes:** Architected to run on Ray for dynamic scale-out across multiple GPUs or machines depending on the inference load (`NUM_WORKERS > 1`). For environments that heavily rely on central Prometheus scraping, running in single-threaded mode (`NUM_WORKERS=1`) ensures accurate metrics collection by running the worker loop synchronously in the main thread rather than delegating it to Ray child processes.
+- **Execution:** One model per process; scale with standard service replicas in
+  the shared Kafka consumer group. This matches Kafka partition assignment and
+  avoids nested Ray runtimes.
 - **Metrics:** Exposes `/metrics` via `prometheus_client` (configurable port via `PROMETHEUS_PORT`, default `8000`) with `embedder_messages_processed_total` counter by status.
+
+### 7. Asynchronous Object Cleanup (Zig)
+
+After an embedding is safely in Qdrant, the Embedder writes `{s3_key}` to the
+durable `object-cleanup` topic. A dedicated Zig worker gathers up to 100 keys
+and deletes them from MinIO in one operation. Its Kafka offsets are committed
+only after the deletion succeeds; replayed deletion is safe.
 
 ## Data Flow Diagram
 
 ```mermaid
 graph TD
     User([User API Request]) --> |/ingest| Frontier
-    Extractor --> |Discovered links; configure frontier-ingest for safe recrawl| Frontier
+    Extractor --> |Discovered links via discovered-urls| Frontier
     
     Frontier --> |urls| Fetcher
     
-    Fetcher --> |Dynamic URL via frontier-ingest| Frontier
+    Fetcher --> |Dynamic URL via discovered-urls| Frontier
     Frontier --> |dynamic-urls| Renderer[Renderer / Headless]
     Fetcher --> |Static HTML| Extractor
     
@@ -77,9 +89,11 @@ graph TD
     
     Extractor --> |Cleaned Text| KafkaBuffer[Kafka Buffer]
     
-    KafkaBuffer --> |Batches| Embedder[ML Embedder / Ray]
+    KafkaBuffer --> |Batches| Embedder[ML Embedder]
     
     Embedder --> |Vectors| Qdrant[(Qdrant Vector DB)]
+    Embedder --> |object-cleanup| CleanupWorker[Cleanup Worker]
+    CleanupWorker --> |batch delete| MinIO
 ```
 
 ## Observability

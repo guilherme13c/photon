@@ -8,13 +8,14 @@ import (
 	"syscall"
 
 	"github.com/guilherme13c/renderer/config"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/guilherme13c/renderer/repository/headless_client"
 	"github.com/guilherme13c/renderer/repository/kafka/consumer"
 	"github.com/guilherme13c/renderer/repository/kafka/producer"
 	"github.com/guilherme13c/renderer/repository/storage"
-	"net/http"
 	"github.com/guilherme13c/renderer/service"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
+	_ "net/http/pprof"
 )
 
 func main() {
@@ -31,7 +32,8 @@ func main() {
 	kafkaProducer := producer.NewProducer(cfg.KafkaBroker)
 	defer kafkaProducer.Close()
 
-	headlessClient := headless_client.NewClient()
+	headlessClient := headless_client.NewClient(cfg.BrowserConcurrency, cfg.FrontierURL)
+	defer headlessClient.Close()
 	storageRepo := storage.NewStorage()
 	defer storageRepo.Close()
 
@@ -43,6 +45,20 @@ func main() {
 	defer cancel()
 
 	// Start Prometheus metrics server
+	go func() {
+		if os.Getenv("PHOTON_ENABLE_PPROF") != "1" {
+			return
+		}
+		port := os.Getenv("PHOTON_PPROF_PORT")
+		if port == "" {
+			port = "6061"
+		}
+		log.Printf("Starting renderer pprof server on :%s", port)
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			log.Printf("pprof server failed: %v", err)
+		}
+	}()
+
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 		log.Println("Starting Prometheus metrics server on :3000")

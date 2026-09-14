@@ -58,6 +58,18 @@ pub const KafkaConsumer = struct {
             return error.KafkaConfigFailed;
         }
 
+        // Admission changes Redis state. Commit only after the handler has
+        // completed so a crash/failure is retried from Kafka.
+        if (c.rd_kafka_conf_set(
+            conf,
+            "enable.auto.commit",
+            "false",
+            &errstr,
+            errstr.len,
+        ) != c.RD_KAFKA_CONF_OK) {
+            return error.KafkaConfigFailed;
+        }
+
         const rk = c.rd_kafka_new(
             c.RD_KAFKA_CONSUMER,
             conf,
@@ -143,7 +155,17 @@ pub const KafkaConsumer = struct {
                 )[0..msg.*.len];
                 handler(handler_ctx, payload_bytes) catch |err| {
                     std.log.err("Message handler failed: {}", .{err});
+                    // Do not continue to a later message in this partition:
+                    // committing that later offset would acknowledge this
+                    // failed admission as well. The worker exits and Compose
+                    // restarts it from the last committed offset.
+                    return err;
                 };
+                const commit_err = c.rd_kafka_commit_message(self.rk, msg, 0);
+                if (commit_err != c.RD_KAFKA_RESP_ERR_NO_ERROR) {
+                    std.log.err("Kafka commit failed: {s}", .{c.rd_kafka_err2str(commit_err)});
+                    return error.KafkaCommitFailed;
+                }
             }
         }
     }

@@ -1,6 +1,6 @@
-ray
 confluent-kafka
 sentence-transformers
+torch==2.5.1+cpu
 numpy
 qdrant-client
 pytest

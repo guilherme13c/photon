@@ -10,6 +10,10 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
         config.port = std.fmt.parseInt(u16, val_str, 10) catch config.port;
     }
 
+    if (std.c.getenv("FRONTIER_ROLE")) |val| {
+        config.role = try allocator.dupe(u8, std.mem.span(val));
+    }
+
     if (std.c.getenv("REDIS_URL")) |val| {
         config.redis_url = try allocator.dupe(u8, std.mem.span(val));
     }
@@ -93,6 +97,8 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
 
         if (std.mem.eql(u8, key, "PORT")) {
             config.port = std.fmt.parseInt(u16, val, 10) catch config.port;
+        } else if (std.mem.eql(u8, key, "FRONTIER_ROLE")) {
+            config.role = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "REDIS_URL")) {
             config.redis_url = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_BROKERS")) {

@@ -8,7 +8,7 @@
       "url": "https://github.com/guilherme13c/photon.git",
       "provider": "github",
       "link_mode": "web",
-      "revision": "c25a8e3726a80fd202159d8297f479604ae18ec8"
+      "revision": "446de8b00757aef84ad6a184049cfedc821b31d6"
     },
     "viewBox": [1390, 820]
   },
@@ -18,10 +18,11 @@
     { "id": "kafka", "type": "messagebus", "label": "Apache Kafka", "sublabel": "Pipeline topics", "pos": [420, 250], "size": [145, 70], "sources": [{ "path": "docker-compose.yml", "line": 35, "label": "topic initialization" }] },
     { "id": "workers", "type": "backend", "label": "Fetch & Render Workers", "sublabel": "Go · static pages and SPAs", "pos": [625, 250], "size": [180, 70], "sources": [{ "path": "fetcher/main.go", "line": 1, "label": "fetcher entrypoint" }, { "path": "renderer/main.go", "line": 1, "label": "renderer entrypoint" }] },
     { "id": "extractor", "type": "backend", "label": "Extractor", "sublabel": "Zig · links and clean text", "pos": [865, 250], "size": [150, 70], "sources": [{ "path": "extractor/src/main.zig", "line": 1, "label": "service entrypoint" }] },
-    { "id": "embedder", "type": "backend", "label": "Embedder", "sublabel": "Python/Ray vectors", "pos": [1075, 250], "size": [145, 70], "sources": [{ "path": "embedder/src/main.py", "line": 1, "label": "service entrypoint" }] },
+    { "id": "embedder", "type": "backend", "label": "Embedder", "sublabel": "Python batch vectors", "pos": [1075, 250], "size": [145, 70], "sources": [{ "path": "embedder/src/main.py", "line": 1, "label": "service entrypoint" }] },
     { "id": "qdrant", "type": "database", "label": "Qdrant", "sublabel": "Document vectors", "pos": [1260, 250], "size": [110, 70], "sources": [{ "path": "docker-compose.yml", "line": 98, "label": "Qdrant service" }] },
     { "id": "redis", "type": "database", "label": "Redis", "sublabel": "Deduplication and politeness", "pos": [207.5, 440], "size": [170, 70], "sources": [{ "path": "docker-compose.yml", "line": 105, "label": "Redis service" }] },
     { "id": "minio", "type": "cloud", "label": "MinIO", "sublabel": "Raw HTML objects", "pos": [635, 440], "size": [160, 70], "sources": [{ "path": "docker-compose.yml", "line": 49, "label": "MinIO service" }] },
+    { "id": "cleanup-worker", "type": "backend", "label": "Cleanup worker", "sublabel": "Zig · batched MinIO deletion", "pos": [1065, 440], "size": [165, 70], "sources": [{ "path": "cleanup-worker/src/main.zig", "line": 83, "label": "service entrypoint" }] },
     { "id": "prometheus", "type": "cloud", "label": "Prometheus", "sublabel": "Metrics scraping", "pos": [620, 630], "size": [160, 70], "sources": [{ "path": "config/prometheus.yml", "line": 1, "label": "scrape configuration" }] },
     { "id": "grafana", "type": "frontend", "label": "Grafana", "sublabel": "Photon Pipeline dashboard", "pos": [860, 630], "size": [180, 70], "sources": [{ "path": "docker-compose.yml", "line": 173, "label": "Grafana service" }] }
   ],
@@ -35,6 +36,8 @@
     { "from": "frontier", "to": "redis", "label": "URL state", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelAt": [350, 380] },
     { "from": "workers", "to": "minio", "label": "store HTML", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelAt": [765, 380] },
     { "from": "minio", "to": "extractor", "label": "retrieve HTML", "fromSide": "right", "toSide": "bottom", "route": "auto" },
+    { "from": "embedder", "to": "cleanup-worker", "label": "object-cleanup", "fromSide": "bottom", "toSide": "top", "route": "straight", "labelDy": 24 },
+    { "from": "cleanup-worker", "to": "minio", "label": "batch delete", "fromSide": "left", "toSide": "right", "route": "straight", "labelAt": [850, 510] },
     { "from": "prometheus", "to": "grafana", "label": "query metrics", "fromSide": "right", "toSide": "left", "route": "straight" }
   ],
   "cards": [

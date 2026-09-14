@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "topic": "object-cleanup",
+  "key": "pages/example.html",
+  "value": {
+    "s3_key": "pages/example.html"
+  }
+}

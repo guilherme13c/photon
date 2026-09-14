@@ -43,6 +43,15 @@ deployment, executes the function/service/end-to-end tiers, and writes results
 and diagnostics beneath `artifacts/<project>/`. It must never point at a
 developer or production deployment.
 
+To capture CPU flame graphs during one controlled E2E workload, run
+`PHOTON_ALLOW_BENCHMARKS=1 make benchmark-flamegraphs`. The command records
+Frontier, admission workers, Fetcher, Renderer, Extractor, Embedder, and the
+cleanup worker, then writes `flamegraphs/*.flame.html` and the underlying perf
+data beneath the run artifact directory. It requires the operator to configure
+Linux perf permissions beforehand; the scripts do not change kernel settings.
+All suite output is written to the run's `*.stdout.log` files, including
+failures, so the terminal stays quiet except for Make's exit status.
+
 The suite combines `docker-compose.yml` with `docker-compose.benchmark.yml`.
 The override uses fresh named volumes for Redis, MinIO, and Qdrant, preventing
 old deduplication keys, objects, or vectors from contaminating a result. Kafka

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "topic": "urls",
+  "topic": "discovered-urls",
   "key": "example.test",
   "value": "https://example.test/articles/one"
 }

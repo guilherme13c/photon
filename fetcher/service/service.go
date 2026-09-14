@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
+	"time"
 
 	"strings"
 
@@ -20,6 +23,18 @@ var (
 		Name: "fetcher_urls_processed_total",
 		Help: "The total number of processed URLs",
 	}, []string{"status"})
+	processDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name: "fetcher_process_duration_seconds", Help: "End-to-end Fetcher message processing duration",
+		Buckets: prometheus.DefBuckets,
+	})
+	stageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "fetcher_stage_duration_seconds",
+		Help:    "Duration of bounded Fetcher pipeline stages",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"stage"})
+	inFlight = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "fetcher_in_flight", Help: "Fetcher messages currently being processed",
+	})
 )
 
 type Service struct {
@@ -45,11 +60,16 @@ func NewService(client http_client.Client, st storage.Storage, pr producer.Produ
 // Process returns an error only when the input has not reached a durable next
 // state. Callers must not commit the Kafka offset in that case.
 func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
+	started := time.Now()
+	inFlight.Inc()
+	defer func() { inFlight.Dec(); processDuration.Observe(time.Since(started).Seconds()) }()
 	url := string(msg.Value)
 	log.Printf("Fetching URL: %s", url)
 
 	// 1. Fetch HTML
-	content, err := s.client.Fetch(ctx, url)
+	fetchStarted := time.Now()
+	response, err := s.client.Fetch(ctx, url)
+	stageDuration.WithLabelValues("origin_fetch").Observe(time.Since(fetchStarted).Seconds())
 	if err != nil {
 		urlsProcessed.WithLabelValues("fetch_error").Inc()
 		log.Printf("Failed to fetch %s: %v, sending to DLQ...", url, err)
@@ -59,8 +79,18 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 		}
 		return nil
 	}
+	if response.RedirectURL != "" {
+		// The target is a new candidate, not an in-worker follow-up. Frontier
+		// normalizes it, applies robots, deduplicates it, and reserves the
+		// target host before it can be fetched.
+		if err := s.producer.Produce(ctx, s.dynamicTopic, admissionKey(response.RedirectURL), []byte(response.RedirectURL)); err != nil {
+			return fmt.Errorf("publish redirect target: %w", err)
+		}
+		urlsProcessed.WithLabelValues("redirect").Inc()
+		return nil
+	}
 
-	contentStr := string(content)
+	contentStr := string(response.Body)
 
 	// 2. Heuristic Check
 	if s.isDynamic(contentStr) {
@@ -68,7 +98,7 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 		log.Printf("URL %s classified as dynamic, routing to renderer...", url)
 		// Rendering is a second request to this host. Send it back through the
 		// frontier so it receives another shared politeness slot.
-		if err := s.producer.Produce(ctx, s.dynamicTopic, []byte(url), []byte("render:"+url)); err != nil {
+		if err := s.producer.Produce(ctx, s.dynamicTopic, admissionKey(url), []byte("render:"+url)); err != nil {
 			log.Printf("Failed to produce to dynamic topic for %s: %v", url, err)
 			return fmt.Errorf("publish dynamic URL: %w", err)
 		}
@@ -80,7 +110,9 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 		URL:     url,
 		Content: contentStr,
 	}
+	storageStarted := time.Now()
 	s3Key, err := s.storage.Save(ctx, doc)
+	stageDuration.WithLabelValues("object_store_save").Observe(time.Since(storageStarted).Seconds())
 	if err != nil {
 		urlsProcessed.WithLabelValues("storage_error").Inc()
 		log.Printf("Failed to save doc %s: %v", url, err)
@@ -88,16 +120,35 @@ func (s *Service) Process(ctx context.Context, msg consumer.Message) error {
 	}
 
 	// 4. Produce to Kafka for the parser service
-	payload := fmt.Sprintf(`{"url": "%s", "s3_key": "%s"}`, url, s3Key)
-	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), []byte(payload)); err != nil {
+	payload, err := json.Marshal(struct {
+		URL                 string `json:"url"`
+		S3Key               string `json:"s3_key"`
+		PipelineStartedAtMS int64  `json:"pipeline_started_at_ms"`
+	}{URL: url, S3Key: s3Key, PipelineStartedAtMS: started.UnixMilli()})
+	if err != nil {
+		urlsProcessed.WithLabelValues("serialize_error").Inc()
+		return fmt.Errorf("serialize fetched page: %w", err)
+	}
+	produceStarted := time.Now()
+	if err := s.producer.Produce(ctx, s.producerTopic, []byte(url), payload); err != nil {
+		stageDuration.WithLabelValues("produce_fetched_page").Observe(time.Since(produceStarted).Seconds())
 		urlsProcessed.WithLabelValues("kafka_error").Inc()
 		log.Printf("Failed to produce message for %s: %v", url, err)
 		return fmt.Errorf("publish fetched page: %w", err)
 	}
+	stageDuration.WithLabelValues("produce_fetched_page").Observe(time.Since(produceStarted).Seconds())
 
 	urlsProcessed.WithLabelValues("success").Inc()
 	log.Printf("Successfully processed %s", url)
 	return nil
+}
+
+func admissionKey(rawURL string) []byte {
+	parsed, err := url.Parse(rawURL)
+	if err == nil && parsed.Host != "" {
+		return []byte(parsed.Host)
+	}
+	return []byte(rawURL)
 }
 
 func (s *Service) isDynamic(html string) bool {

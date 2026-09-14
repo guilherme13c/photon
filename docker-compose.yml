@@ -5,8 +5,10 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     volumes:
-      - ./zookeeper_data:/var/lib/zookeeper/data
-      - ./zookeeper_log:/var/lib/zookeeper/log
+      # Keep the Kafka coordination state container-managed for the same
+      # non-root ownership guarantee as Kafka's broker log volume.
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
 
   kafka:
     image: confluentinc/cp-kafka:7.3.2
@@ -25,8 +27,13 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Topics must be provisioned with their intended partition count before
+      # producers start; implicit one-partition creation serializes the crawler.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
     volumes:
-      - ./kafka_data:/var/lib/kafka/data
+      # Docker manages ownership for this volume, so Kafka's non-root appuser
+      # can write its log segments in isolated Compose and benchmark projects.
+      - kafka_data:/var/lib/kafka/data
 
   kafka-exporter:
     image: danielqsj/kafka-exporter:latest
@@ -52,26 +59,43 @@ services:
     image: confluentinc/cp-kafka:7.3.2
     depends_on:
       - kafka
-    entrypoint: [ '/bin/sh', '-c' ]
-    command: |
-      set -eu
-      until kafka-topics --bootstrap-server kafka:29092 --list > /dev/null 2>&1; do
-        echo 'Waiting for Kafka to become reachable...'
-        sleep 2
-      done
+    entrypoint: [ '/bin/sh', '-ec' ]
+    # Compose passes each command list item as one argument. Keeping the script
+    # in a single item prevents `sh -c` from executing only its first word.
+    command:
+      - |
+        until kafka-topics --bootstrap-server kafka:29092 --list > /dev/null 2>&1; do
+          echo 'Waiting for Kafka to become reachable...'
+          sleep 2
+        done
 
-      echo 'Creating Kafka topics'
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic fetched-pages --replication-factor 1 --partitions 3
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic cleaned_documents --replication-factor 1 --partitions 3
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic urls --replication-factor 1 --partitions 3
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic frontier-dlq --replication-factor 1 --partitions 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic fetcher-dlq --replication-factor 1 --partitions 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic extractor-dlq --replication-factor 1 --partitions 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic embedder-dlq --replication-factor 1 --partitions 1
-      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dynamic-urls --replication-factor 1 --partitions 3
-      
-      echo 'Successfully created the following topics:'
-      kafka-topics --bootstrap-server kafka:29092 --list
+        echo 'Creating Kafka topics'
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic fetched-pages --replication-factor 1 --partitions 3
+        # Embedding is CPU-bound and stateless per URL. Match the frontier's
+        # partition count so replicas can scale past three consumer lanes.
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic cleaned_documents --replication-factor 1 --partitions 12
+        # `--create --if-not-exists` does not expand an existing development or
+        # staging topic. Kafka rejects an --alter request for an already-sized
+        # topic, so inspect before expanding rather than turning a successful
+        # initialization into a failed Compose dependency.
+        current_partitions="$(kafka-topics --bootstrap-server kafka:29092 --describe --topic cleaned_documents | sed -n 's/.*PartitionCount:[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+        if [ "$$current_partitions" -lt 12 ]; then
+          kafka-topics --bootstrap-server kafka:29092 --alter --topic cleaned_documents --partitions 12
+        fi
+        # Fetch work is keyed by host to preserve per-host ordering. Give that
+        # key space enough partitions that independent hot hosts do not share
+        # one serial consumer lane.
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic urls --replication-factor 1 --partitions 12
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic frontier-dlq --replication-factor 1 --partitions 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic fetcher-dlq --replication-factor 1 --partitions 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic extractor-dlq --replication-factor 1 --partitions 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic embedder-dlq --replication-factor 1 --partitions 1
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic object-cleanup --replication-factor 1 --partitions 12
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dynamic-urls --replication-factor 1 --partitions 12
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic discovered-urls --replication-factor 1 --partitions 12
+
+        echo 'Successfully created the following topics:'
+        kafka-topics --bootstrap-server kafka:29092 --list
 
   minio:
     image: quay.io/minio/minio:latest
@@ -127,12 +151,16 @@ services:
     build:
       context: ./frontier
     depends_on:
-      - kafka
-      - redis
+      redis:
+        condition: service_started
+      init-kafka:
+        condition: service_completed_successfully
     environment:
       KAFKA_BROKERS: kafka:29092
       REDIS_URL: redis://redis:6379
       PORT: 8080
+      FRONTIER_ROLE: manager
+      KAFKA_INGEST_TOPIC: discovered-urls
       KAFKA_DYNAMIC_URLS_TOPIC: dynamic-urls
     ports:
       - "8080:8080"
@@ -142,16 +170,48 @@ services:
           cpus: '0.5'
           memory: 256M
 
+  # Stateless consumers of the durable candidate stream. Scale this service
+  # with `docker compose up --scale admission-worker=N`; Redis Lua remains the
+  # atomic dedupe and per-host scheduling boundary across all replicas.
+  admission-worker:
+    build:
+      context: ./frontier
+    depends_on:
+      redis:
+        condition: service_started
+      init-kafka:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      REDIS_URL: redis://redis:6379
+      FRONTIER_ROLE: admission
+      KAFKA_INGEST_TOPIC: discovered-urls
+      KAFKA_GROUP_ID: admission-workers
+      KAFKA_DLQ_TOPIC: frontier-dlq
+    restart: unless-stopped
+    deploy:
+      replicas: ${PHOTON_ADMISSION_REPLICAS:-3}
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
   extractor:
     build:
       context: ./extractor
     depends_on:
-      - kafka
-      - minio
+      init-kafka:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
     environment:
       KAFKA_BROKERS: kafka:29092
       MINIO_ENDPOINT: http://minio:9000
-      KAFKA_DLQ_TOPIC: extractor-dlq
+      KAFKA_INGEST_TOPIC: ${EXTRACTOR_KAFKA_INGEST_TOPIC:-fetched-pages}
+      KAFKA_DISCOVERED_URLS_TOPIC: ${EXTRACTOR_KAFKA_DISCOVERED_URLS_TOPIC:-discovered-urls}
+      KAFKA_CLEANED_TOPIC: ${EXTRACTOR_KAFKA_CLEANED_TOPIC:-cleaned_documents}
+      KAFKA_GROUP_ID: ${EXTRACTOR_KAFKA_GROUP_ID:-extractor-group}
+      KAFKA_DLQ_TOPIC: ${EXTRACTOR_KAFKA_DLQ_TOPIC:-extractor-dlq}
       PROMETHEUS_PORT: ${EXTRACTOR_PROMETHEUS_PORT:-8001}
     deploy:
       resources:
@@ -163,9 +223,12 @@ services:
     build:
       context: ./embedder
     depends_on:
-      - kafka
-      - qdrant
-      - minio
+      init-kafka:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_started
     environment:
       KAFKA_BROKER: kafka:29092
       QDRANT_URL: http://qdrant:6333
@@ -173,8 +236,13 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      KAFKA_DLQ_TOPIC: embedder-dlq
-      NUM_WORKERS: 1
+      KAFKA_INPUT_TOPIC: ${EMBEDDER_KAFKA_INPUT_TOPIC:-cleaned_documents}
+      KAFKA_GROUP_ID: ${EMBEDDER_KAFKA_GROUP_ID:-ray-embedder-workers}
+      KAFKA_DLQ_TOPIC: ${EMBEDDER_KAFKA_DLQ_TOPIC:-embedder-dlq}
+      KAFKA_CLEANUP_TOPIC: ${EMBEDDER_KAFKA_CLEANUP_TOPIC:-object-cleanup}
+      EMBED_BATCH_SIZE: ${PHOTON_EMBED_BATCH_SIZE:-32}
+      EMBED_BATCH_WAIT_MS: ${PHOTON_EMBED_BATCH_WAIT_MS:-25}
+      EMBED_MAX_TEXT_CHARS: ${PHOTON_EMBED_MAX_TEXT_CHARS:-8192}
       PROMETHEUS_PORT: ${EMBEDDER_PROMETHEUS_PORT:-8000}
     deploy:
       resources:
@@ -182,21 +250,49 @@ services:
           cpus: '1.0'
           memory: 2G
 
+  cleanup-worker:
+    build:
+      context: ./cleanup-worker
+    depends_on:
+      init-kafka:
+        condition: service_completed_successfully
+      minio:
+        condition: service_started
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_GROUP_ID: object-cleanup-workers
+      KAFKA_CLEANUP_TOPIC: object-cleanup
+      CLEANUP_BATCH_WAIT_MS: ${PHOTON_CLEANUP_BATCH_WAIT_MS:-100}
+      # MinIO Client reads this named alias without writing credentials to disk.
+      MC_HOST_photon: http://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@minio:9000
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
 
   renderer:
     build:
       context: ./renderer
     depends_on:
-      - kafka
-      - minio
+      init-kafka:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
     environment:
       KAFKA_BROKER: kafka:29092
-      KAFKA_TOPIC: dynamic-urls
-      KAFKA_PRODUCER_TOPIC: fetched-pages
-      KAFKA_GROUP: renderer-group
+      KAFKA_TOPIC: ${RENDERER_KAFKA_TOPIC:-dynamic-urls}
+      KAFKA_PRODUCER_TOPIC: ${RENDERER_KAFKA_PRODUCER_TOPIC:-fetched-pages}
+      KAFKA_GROUP: ${RENDERER_KAFKA_GROUP:-renderer-group}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MAX_ROUTINES: ${PHOTON_MAX_ROUTINES:-10}
+      RENDERER_BROWSER_CONCURRENCY: ${PHOTON_RENDERER_BROWSER_CONCURRENCY:-${PHOTON_MAX_ROUTINES:-10}}
+      FRONTIER_URL: http://frontier:8080
+      PHOTON_ENABLE_PPROF: ${PHOTON_ENABLE_PPROF:-0}
+      PHOTON_PPROF_PORT: "6061"
     ports:
       - "3000:3000"
     deploy:
@@ -208,22 +304,30 @@ services:
     build:
       context: ./fetcher
     depends_on:
-      - kafka
-      - frontier
-      - renderer
-      - minio
+      init-kafka:
+        condition: service_completed_successfully
+      init-minio:
+        condition: service_completed_successfully
+      frontier:
+        condition: service_started
+      renderer:
+        condition: service_started
     environment:
       KAFKA_BROKER: kafka:29092
-      KAFKA_TOPIC: urls
-      KAFKA_PRODUCER_TOPIC: fetched-pages
-      KAFKA_DYNAMIC_URLS_TOPIC: frontier-ingest
-      KAFKA_GROUP: fetcher-group
+      KAFKA_TOPIC: ${FETCHER_KAFKA_TOPIC:-urls}
+      KAFKA_PRODUCER_TOPIC: ${FETCHER_KAFKA_PRODUCER_TOPIC:-fetched-pages}
+      KAFKA_DYNAMIC_URLS_TOPIC: ${FETCHER_KAFKA_DYNAMIC_URLS_TOPIC:-discovered-urls}
+      KAFKA_GROUP: ${FETCHER_KAFKA_GROUP:-fetcher-group}
       RENDERER_URL: http://renderer:3000
+      FRONTIER_URL: http://frontier:8080
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      KAFKA_DLQ_TOPIC: fetcher-dlq
+      KAFKA_DLQ_TOPIC: ${FETCHER_KAFKA_DLQ_TOPIC:-fetcher-dlq}
       PROMETHEUS_PORT: ${FETCHER_PROMETHEUS_PORT:-2112}
+      MAX_ROUTINES: ${PHOTON_MAX_ROUTINES:-10}
+      PHOTON_ENABLE_PPROF: ${PHOTON_ENABLE_PPROF:-0}
+      PHOTON_PPROF_PORT: "6060"
     deploy:
       resources:
         limits:
@@ -237,8 +341,31 @@ services:
     build:
       context: ./tests/origin
     profiles: ["test"]
+    environment:
+      PHOTON_ORIGIN_CRAWL_DELAY: ${PHOTON_ORIGIN_CRAWL_DELAY:-1}
     ports:
       - "18088:8088"
+    networks:
+      default:
+        aliases:
+          - origin-0
+          - origin-1
+          - origin-2
+          - origin-3
+          - origin-4
+          - origin-5
+          - origin-6
+          - origin-7
+          - origin-8
+          - origin-9
+          - origin-10
+          - origin-11
+          - origin-12
+          - origin-13
+          - origin-14
+          - origin-15
+          - origin-16
+          - origin-17
 
   prometheus:
     image: prom/prometheus:latest
@@ -259,3 +386,8 @@ services:
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning
       - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+
+volumes:
+  kafka_data:
+  zookeeper_data:
+  zookeeper_log:

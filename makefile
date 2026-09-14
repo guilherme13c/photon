@@ -1,6 +1,6 @@
-.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder
+.PHONY: build run test clean build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker run-frontier run-extractor run-fetcher run-renderer run-embedder test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker test-fast test-contracts test-simulation test-fuzz test-integration test-functional test-performance test-capacity test-chaos benchmark-smoke benchmark-functions benchmark-services benchmark-e2e benchmark clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 
-build: build-frontier build-extractor build-fetcher build-renderer
+build: build-frontier build-extractor build-fetcher build-renderer build-cleanup-worker
 
 build-frontier:
 	cd frontier && zig build
@@ -13,6 +13,9 @@ build-fetcher:
 
 build-renderer:
 	cd renderer && go build -o bin/renderer main.go
+
+build-cleanup-worker:
+	cd cleanup-worker && zig build
 
 run: run-frontier run-extractor run-fetcher run-renderer run-embedder
 
@@ -31,7 +34,7 @@ run-renderer:
 run-embedder:
 	cd embedder && . ../.venv/bin/activate && PYTHONPATH=. python -m src.main
 
-test: test-frontier test-extractor test-fetcher test-renderer test-embedder
+test: test-frontier test-extractor test-fetcher test-renderer test-embedder test-cleanup-worker
 
 # The PR-fast gate contains no Docker or public-network dependency.
 test-fast: test test-contracts test-simulation test-fuzz
@@ -97,7 +100,10 @@ test-renderer:
 test-embedder:
 	cd embedder && . ../.venv/bin/activate && PYTHONPATH=. pytest
 
-clean: clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder
+test-cleanup-worker:
+	cd cleanup-worker && zig build test --summary all
+
+clean: clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 
 clean-frontier:
 	cd frontier && rm -rf .zig-cache zig-out *.log
@@ -113,3 +119,6 @@ clean-renderer:
 
 clean-embedder:
 	cd embedder && rm -rf __pycache__ .pytest_cache *.log
+
+clean-cleanup-worker:
+	cd cleanup-worker && rm -rf .zig-cache zig-out *.log

@@ -9,8 +9,23 @@ const Filter = @import("filter.zig").Filter;
 const RobotsChecker = @import("robots.zig").RobotsChecker;
 const Scheduler = @import("scheduler.zig").Scheduler;
 
+pub const processing_latency_bucket_ns = [_]u64{
+    5_000_000,   10_000_000,  25_000_000,    50_000_000,    100_000_000,
+    250_000_000, 500_000_000, 1_000_000_000, 2_500_000_000,
+};
+
+fn zeroLatencyBuckets() [processing_latency_bucket_ns.len]std.atomic.Value(u64) {
+    var buckets: [processing_latency_bucket_ns.len]std.atomic.Value(u64) = undefined;
+    for (&buckets) |*bucket| bucket.* = std.atomic.Value(u64).init(0);
+    return buckets;
+}
+
 pub const Service = struct {
     const max_pending_urls = 10_000;
+    // A grant happens just before an HTTP/CDP call, not at the kernel's first
+    // outbound byte. Reserve a small conservative handoff budget so a delayed
+    // Chromium Navigate cannot be overtaken by the next worker's grant.
+    const start_permit_handoff_guard_ms = 100;
 
     allocator: std.mem.Allocator,
     io: std.Io,
@@ -20,11 +35,15 @@ pub const Service = struct {
     robots: RobotsChecker,
     scheduler: Scheduler,
     dlq: _KafkaProducer,
+    discovered_urls_topic: []const u8,
     urls_ingested_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     urls_filtered_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     urls_deduped_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     urls_scheduled_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     pending_urls_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    admission_duration_bucket_counts: [processing_latency_bucket_ns.len]std.atomic.Value(u64) = zeroLatencyBuckets(),
+    admission_duration_sum_ns: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    admission_duration_count: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     pending_urls: std.ArrayList([]const u8) = .empty,
     pending_urls_mutex: std.Io.Mutex = .init,
     pending_urls_condition: std.Io.Condition = .init,
@@ -34,6 +53,7 @@ pub const Service = struct {
         io: std.Io,
         cache: _Redis,
         dlq: _KafkaProducer,
+        discovered_urls_topic: []const u8,
     ) Service {
         return .{
             .allocator = allocator,
@@ -52,7 +72,38 @@ pub const Service = struct {
                 2000,
             ),
             .dlq = dlq,
+            .discovered_urls_topic = discovered_urls_topic,
         };
+    }
+
+    /// Records synchronous API admission time without URL or host labels.
+    pub fn observeAdmissionDuration(self: *Service, elapsed_ns: u64) void {
+        for (processing_latency_bucket_ns, 0..) |upper_bound, index| {
+            if (elapsed_ns <= upper_bound) {
+                _ = self.admission_duration_bucket_counts[index].fetchAdd(1, .monotonic);
+            }
+        }
+        _ = self.admission_duration_sum_ns.fetchAdd(elapsed_ns, .monotonic);
+        _ = self.admission_duration_count.fetchAdd(1, .monotonic);
+    }
+
+    /// Store candidate URLs in Kafka before policy or scheduler work. This
+    /// keeps link bursts out of the manager's in-memory queue.
+    pub fn publishCandidateBatch(self: *Service, urls: []const []const u8) !usize {
+        var accepted: usize = 0;
+        for (urls) |raw_url| {
+            const normalized = self.normalizer.process(raw_url) catch |err| {
+                self.dlq.publishDeadLetter(raw_url, "Invalid URL candidate") catch {};
+                std.log.warn("Rejected malformed candidate {s}: {}", .{ raw_url, err });
+                continue;
+            };
+            defer normalized.deinit(self.allocator);
+            const domain = extractDomain(normalized.canonical);
+            try self.dlq.publishUrl(self.discovered_urls_topic, domain, normalized.canonical);
+            accepted += 1;
+        }
+        _ = self.urls_ingested_total.fetchAdd(@intCast(accepted), .monotonic);
+        return accepted;
     }
 
     pub fn processUrl(self: *Service, raw_url: []const u8) !void {
@@ -166,14 +217,30 @@ pub const Service = struct {
         return self.cache.getActiveDomainCount();
     }
 
+    pub fn admissionTotals(self: *Service) !@import("../repository/redis/interface.zig").AdmissionTotals {
+        return self.cache.getAdmissionTotals();
+    }
+
+    /// Claim an origin-start permit immediately before a worker starts network
+    /// I/O. A delayed Kafka consumer therefore cannot turn a correctly spaced
+    /// dispatcher publication into a burst at the origin.
+    pub fn acquireStartPermit(self: *Service, raw_url: []const u8) !@import("../repository/redis/interface.zig").StartPermit {
+        const normalized = try self.normalizer.process(raw_url);
+        defer normalized.deinit(self.allocator);
+        const domain = extractDomain(normalized.canonical);
+        const delay_ms = (try self.robots.cachedCrawlDelay(normalized, domain)) orelse self.scheduler.default_delay_ms;
+        const now: i64 = @intCast(std.Io.Clock.real.now(self.io).toMilliseconds());
+        return self.cache.acquireStartPermit(domain, now, delay_ms + start_permit_handoff_guard_ms);
+    }
+
     pub fn topHosts(self: *Service, allocator: std.mem.Allocator, limit: usize) ![]@import("../repository/redis/interface.zig").HostDiagnostic {
         return self.cache.getTopHosts(allocator, limit);
     }
 
     fn kafkaHandler(ctx: *anyopaque, message: []const u8) anyerror!void {
         const self: *Service = @ptrCast(@alignCast(ctx));
-        const urls = [_][]const u8{message};
-        _ = try self.enqueueUrlBatch(&urls);
+        // A consumer offset is handled only after Redis admission completes.
+        try self.processUrl(message);
     }
 
     pub fn startConsuming(self: *Service, consumer: _KafkaConsumer) !void {
@@ -215,7 +282,7 @@ test "extractDomain isolates domain correctly" {
     );
 }
 
-test "Service accepts ingestion batches without processing them synchronously" {
+test "Service persists ingestion batches before admission" {
     const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
 
@@ -231,19 +298,15 @@ test "Service accepts ingestion batches without processing them synchronously" {
         io,
         cache.interface(),
         dlq.interface(),
+        "discovered-urls",
     );
-    defer {
-        for (svc.pending_urls.items) |url| std.testing.allocator.free(url);
-        svc.pending_urls.deinit(std.testing.allocator);
-    }
-
     const urls = [_][]const u8{
         "http://example.com/one",
         "http://example.org/two",
     };
-    try std.testing.expectEqual(@as(usize, 2), try svc.enqueueUrlBatch(&urls));
+    try std.testing.expectEqual(@as(usize, 2), try svc.publishCandidateBatch(&urls));
     try std.testing.expectEqual(@as(u64, 2), svc.urls_ingested_total.load(.monotonic));
-    try std.testing.expectEqual(@as(u64, 2), svc.pending_urls_total.load(.monotonic));
+    try std.testing.expectEqual(@as(usize, 2), dlq.published_urls);
     try std.testing.expectEqual(@as(usize, 0), cache.push_count);
 }
 
@@ -263,6 +326,7 @@ test "Service pipeline processes valid new URL" {
         io,
         cache.interface(),
         dlq.interface(),
+        "discovered-urls",
     );
 
     try svc.processUrl("http://example.com/good_page");
@@ -287,12 +351,27 @@ test "Service pipeline drops duplicate URLs" {
         io,
         cache.interface(),
         dlq.interface(),
+        "discovered-urls",
     );
 
     try svc.processUrl("http://example.com/good_page");
     try svc.processUrl("http://example.com/good_page");
 
     try std.testing.expectEqual(@as(usize, 1), cache.push_count);
+}
+
+test "start permits are conservative and host scoped" {
+    const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
+    const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
+    var cache = MockRedis.init(std.testing.allocator);
+    defer cache.deinit();
+    var dlq = MockKafkaProducer.init();
+    var threaded_io: std.Io.Threaded = .init_single_threaded;
+    const io = threaded_io.io();
+    var svc = Service.init(std.testing.allocator, io, cache.interface(), dlq.interface(), "discovered-urls");
+
+    try std.testing.expect((try svc.acquireStartPermit("http://example.com/one")) == .granted);
+    try std.testing.expect((try svc.acquireStartPermit("http://example.com/two")) == .retry_at_ms);
 }
 
 test "Service pipeline publishes blacklisted extensions to DLQ" {
@@ -311,6 +390,7 @@ test "Service pipeline publishes blacklisted extensions to DLQ" {
         io,
         cache.interface(),
         dlq.interface(),
+        "discovered-urls",
     );
 
     try svc.processUrl("http://example.com/document.pdf");

@@ -3,11 +3,14 @@ const redis_interface = @import("interface.zig");
 const _Redis = redis_interface._Redis;
 const AdmissionResult = redis_interface.AdmissionResult;
 const HostDiagnostic = redis_interface.HostDiagnostic;
+const AdmissionTotals = redis_interface.AdmissionTotals;
 const shardForDomain = redis_interface.shardForDomain;
 const frontier_shard_count = redis_interface.frontier_shard_count;
 const parsed_url = @import("parsed_url.zig");
 
-const c = @cImport({ @cInclude("hiredis/hiredis.h"); });
+const c = @cImport({
+    @cInclude("hiredis/hiredis.h");
+});
 
 pub const Redis = struct {
     ctx: *c.redisContext,
@@ -30,15 +33,20 @@ pub const Redis = struct {
         return .{ .ctx = ctx, .io = io };
     }
 
-    pub fn deinit(self: *Redis) void { c.redisFree(self.ctx); }
+    pub fn deinit(self: *Redis) void {
+        c.redisFree(self.ctx);
+    }
 
     pub fn interface(self: *Redis) _Redis {
         return .{ .ptr = self, .vtable = &.{
             .get_cache = getCache,
             .set_cache = setCache,
             .admit_url = admitUrl,
+            .acquire_start_permit = acquireStartPermit,
             .claim_ready_host = claimReadyHost,
             .fetch_ready_urls = fetchReadyUrls,
+            .next_ready_at = nextReadyAt,
+            .get_admission_totals = getAdmissionTotals,
             .get_active_domain_count = getActiveDomainCount,
             .get_top_hosts = getTopHosts,
         } };
@@ -88,15 +96,17 @@ pub const Redis = struct {
         var ready_key_buf: [128]u8 = undefined;
         var stats_key_buf: [512]u8 = undefined;
         var depth_key_buf: [128]u8 = undefined;
+        var totals_key_buf: [128]u8 = undefined;
         const url_key = try std.fmt.bufPrint(&url_key_buf, "frontier:{{{d}}}:url:{d}", .{ shard, url_hash });
         const state_key = try std.fmt.bufPrint(&state_key_buf, "frontier:{{{d}}}:state:{s}", .{ shard, domain });
         const queue_key = try std.fmt.bufPrint(&queue_key_buf, "frontier:{{{d}}}:queue:{s}", .{ shard, domain });
         const ready_key = try std.fmt.bufPrint(&ready_key_buf, "frontier:{{{d}}}:ready-hosts", .{shard});
         const stats_key = try std.fmt.bufPrint(&stats_key_buf, "frontier:{{{d}}}:host-stats:{s}", .{ shard, domain });
         const depth_key = try std.fmt.bufPrint(&depth_key_buf, "frontier:{{{d}}}:host-queue-depth", .{shard});
+        const totals_key = try std.fmt.bufPrint(&totals_key_buf, "frontier:{{{d}}}:admission-totals", .{shard});
         const script =
             \\local seen = tonumber(redis.call('GET', KEYS[1]) or '0')
-            \\if seen > tonumber(ARGV[1]) then return 0 end
+            \\if seen > tonumber(ARGV[1]) then redis.call('HINCRBY', KEYS[7], 'deduped', 1); return 0 end
             \\local next_allowed = tonumber(redis.call('GET', KEYS[2]) or '0')
             \\local now = tonumber(ARGV[1])
             \\if now > next_allowed then next_allowed = now end
@@ -109,12 +119,37 @@ pub const Redis = struct {
             \\redis.call('ZADD', KEYS[6], queue_depth, ARGV[4])
             \\redis.call('HSET', KEYS[5], 'next_allowed_at_ms', next_allowed, 'crawl_delay_ms', ARGV[2], 'queue_depth', queue_depth, 'last_scheduled_at_ms', ARGV[1])
             \\redis.call('HINCRBY', KEYS[5], 'scheduled_total', 1)
+            \\redis.call('HINCRBY', KEYS[7], 'scheduled', 1)
             \\return 1
         ;
-        const reply = try checkedReply(c.redisCommand(self.ctx, "EVAL %s 6 %b %b %b %b %b %b %lld %lld %lld %b %b", script.ptr, url_key.ptr, url_key.len, state_key.ptr, state_key.len, queue_key.ptr, queue_key.len, ready_key.ptr, ready_key.len, stats_key.ptr, stats_key.len, depth_key.ptr, depth_key.len, @as(c_longlong, current_time_ms), @as(c_longlong, delay_ms), @as(c_longlong, next_crawl_timestamp), domain.ptr, domain.len, url.ptr, url.len));
+        const reply = try checkedReply(c.redisCommand(self.ctx, "EVAL %s 7 %b %b %b %b %b %b %b %lld %lld %lld %b %b", script.ptr, url_key.ptr, url_key.len, state_key.ptr, state_key.len, queue_key.ptr, queue_key.len, ready_key.ptr, ready_key.len, stats_key.ptr, stats_key.len, depth_key.ptr, depth_key.len, totals_key.ptr, totals_key.len, @as(c_longlong, current_time_ms), @as(c_longlong, delay_ms), @as(c_longlong, next_crawl_timestamp), domain.ptr, domain.len, url.ptr, url.len));
         defer c.freeReplyObject(reply);
         if (reply.type != c.REDIS_REPLY_INTEGER) return error.UnexpectedRedisReply;
         return if (reply.integer == 1) .scheduled else .duplicate;
+    }
+
+    /// Atomically grant the next origin-start slot.  Admission reservations
+    /// intentionally do not participate here: a Kafka consumer may be delayed
+    /// after dispatch, and only this just-in-time claim can protect the actual
+    /// TCP/Chromium request start.
+    fn acquireStartPermit(ptr: *anyopaque, domain: []const u8, current_time_ms: i64, delay_ms: i64) anyerror!redis_interface.StartPermit {
+        const self: *Redis = @ptrCast(@alignCast(ptr));
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+        const shard = shardForDomain(domain);
+        var key_buf: [512]u8 = undefined;
+        const key = try std.fmt.bufPrint(&key_buf, "frontier:{{{d}}}:start-permit:{s}", .{ shard, domain });
+        const script =
+            \\local next_allowed = tonumber(redis.call('GET', KEYS[1]) or '0')
+            \\local now = tonumber(ARGV[1])
+            \\if now < next_allowed then return next_allowed end
+            \\redis.call('SET', KEYS[1], now + tonumber(ARGV[2]))
+            \\return 0
+        ;
+        const reply = try checkedReply(c.redisCommand(self.ctx, "EVAL %s 1 %b %lld %lld", script.ptr, key.ptr, key.len, @as(c_longlong, current_time_ms), @as(c_longlong, delay_ms)));
+        defer c.freeReplyObject(reply);
+        if (reply.type != c.REDIS_REPLY_INTEGER) return error.UnexpectedRedisReply;
+        return if (reply.integer == 0) .granted else .{ .retry_at_ms = reply.integer };
     }
 
     fn claimReadyHost(ptr: *anyopaque, allocator: std.mem.Allocator, shard: u8, current_time_ms: i64) anyerror!?[]const u8 {
@@ -150,8 +185,10 @@ pub const Redis = struct {
         const stats_key = try std.fmt.bufPrint(&stats_key_buf, "frontier:{{{d}}}:host-stats:{s}", .{ shard, domain });
         const depth_key = try std.fmt.bufPrint(&depth_key_buf, "frontier:{{{d}}}:host-queue-depth", .{shard});
         const script =
-            \\local items = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
-            \\if #items > 0 then redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1]) end
+            \\-- Dispatch exactly one reservation. Releasing every overdue URL as a
+            \\-- batch lets a slow dispatcher violate the host's reserved spacing.
+            \\local items = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, 1)
+            \\if #items > 0 then redis.call('ZREM', KEYS[1], items[1]) end
             \\local queue_depth = redis.call('ZCARD', KEYS[1])
             \\if #items > 0 then redis.call('HINCRBY', KEYS[3], 'dispatched_total', #items) end
             \\redis.call('HSET', KEYS[3], 'queue_depth', queue_depth, 'last_dispatched_at_ms', ARGV[1])
@@ -170,6 +207,36 @@ pub const Redis = struct {
             if (elem.*.type == c.REDIS_REPLY_STRING) try urls.append(allocator, try allocator.dupe(u8, elem.*.str[0..@intCast(elem.*.len)]));
         }
         return urls.toOwnedSlice(allocator);
+    }
+
+    fn nextReadyAt(ptr: *anyopaque, shard: u8) anyerror!?i64 {
+        const self: *Redis = @ptrCast(@alignCast(ptr));
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+        var ready_key_buf: [128]u8 = undefined;
+        const ready_key = try std.fmt.bufPrint(&ready_key_buf, "frontier:{{{d}}}:ready-hosts", .{shard});
+        const reply = try checkedReply(c.redisCommand(self.ctx, "ZRANGE %b 0 0 WITHSCORES", ready_key.ptr, ready_key.len));
+        defer c.freeReplyObject(reply);
+        if (reply.type != c.REDIS_REPLY_ARRAY or reply.elements == 0) return null;
+        if (reply.elements != 2 or reply.element[1].*.type != c.REDIS_REPLY_STRING) return error.UnexpectedRedisReply;
+        return std.fmt.parseInt(i64, reply.element[1].*.str[0..@intCast(reply.element[1].*.len)], 10) catch error.UnexpectedRedisReply;
+    }
+
+    fn getAdmissionTotals(ptr: *anyopaque) anyerror!AdmissionTotals {
+        const self: *Redis = @ptrCast(@alignCast(ptr));
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+        var totals = AdmissionTotals{};
+        for (0..frontier_shard_count) |shard| {
+            var key_buf: [128]u8 = undefined;
+            const key = try std.fmt.bufPrint(&key_buf, "frontier:{{{d}}}:admission-totals", .{shard});
+            const reply = try checkedReply(c.redisCommand(self.ctx, "HMGET %b scheduled deduped", key.ptr, key.len));
+            defer c.freeReplyObject(reply);
+            if (reply.type != c.REDIS_REPLY_ARRAY or reply.elements != 2) return error.UnexpectedRedisReply;
+            totals.scheduled += @intCast(@max(0, replyNumber(reply.element[0])));
+            totals.deduped += @intCast(@max(0, replyNumber(reply.element[1])));
+        }
+        return totals;
     }
 
     fn getActiveDomainCount(ptr: *anyopaque) anyerror!u64 {
@@ -240,7 +307,7 @@ pub const Redis = struct {
         var index: usize = 0;
         while (index < hosts.items.len) : (index += 1) {
             var largest = index;
-            for (hosts.items[index + 1..], index + 1..) |host, host_index| {
+            for (hosts.items[index + 1 ..], index + 1..) |host, host_index| {
                 if (host.queue_depth > hosts.items[largest].queue_depth) largest = host_index;
             }
             if (largest != index) std.mem.swap(HostDiagnostic, &hosts.items[index], &hosts.items[largest]);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,7 +23,7 @@ func main() {
 	cfg, _ := config.Parse()
 
 	// Initialize dependencies
-	httpRepo := http_client.NewClient()
+	httpRepo := http_client.NewClient(cfg.FrontierURL)
 	storageRepo := storage.NewStorage()
 
 	kafkaConsumer := consumer.NewConsumer(cfg.KafkaBroker, cfg.KafkaTopic, cfg.KafkaGroup)
@@ -34,6 +35,20 @@ func main() {
 	svc := service.NewService(httpRepo, storageRepo, kafkaProducer, cfg.KafkaProducerTopic, cfg.KafkaDynamicUrlsTopic, cfg.KafkaDlqTopic)
 
 	// Start Prometheus metrics server
+	go func() {
+		if os.Getenv("PHOTON_ENABLE_PPROF") != "1" {
+			return
+		}
+		log.Printf("Starting fetcher pprof server on :%s", os.Getenv("PHOTON_PPROF_PORT"))
+		port := os.Getenv("PHOTON_PPROF_PORT")
+		if port == "" {
+			port = "6060"
+		}
+		if err := http.ListenAndServe(":"+port, nil); err != nil {
+			log.Printf("pprof server failed: %v", err)
+		}
+	}()
+
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
 		log.Printf("Starting Prometheus metrics server on :%s\n", cfg.PrometheusPort)
@@ -76,7 +91,11 @@ func main() {
 
 				worker, ok := workers[msg.Partition]
 				if !ok {
-					worker = make(chan consumer.Message, 1)
+					// Do not let one hot Kafka partition stop the reader from
+					// receiving work for every other assigned partition. Processing
+					// remains serial *within* a partition, so commit ordering and
+					// host-key ordering are unchanged.
+					worker = make(chan consumer.Message, cfg.MaxRoutines*4)
 					workers[msg.Partition] = worker
 					go processPartition(ctx, svc, worker, sem, completed)
 				}

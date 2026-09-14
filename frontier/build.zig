@@ -62,4 +62,14 @@ pub fn build(b: *std.Build) void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run the test suite");
     test_step.dependOn(&run_unit_tests.step);
+
+    const bench_module = b.createModule(.{
+        .root_source_file = b.path("bench.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const bench = b.addExecutable(.{ .name = "frontier-bench", .root_module = bench_module });
+    const run_bench = b.addRunArtifact(bench);
+    const bench_step = b.step("bench", "Run Frontier hot-path microbenchmarks");
+    bench_step.dependOn(&run_bench.step);
 }

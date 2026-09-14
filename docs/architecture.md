@@ -14,20 +14,22 @@ Its generated source, screenshots, and validation evidence live together in
 ## Components and primary flow
 
 ```text
-URL producer ──POST /ingest──> Frontier ──urls──> Fetcher ──fetched-pages──> Extractor
-                                      │             │                         │
-                                      │             ├─static HTML──> MinIO    ├─cleaned_documents──> Embedder ─> Qdrant
-                                      │             └─dynamic URL ─> Frontier ┘
-                                      └── Redis: deduplication, host queues, robots cache, diagnostics
+URL producer ──POST /ingest──> Frontier Manager ──discovered-urls──> Admission workers
+                                                                      │
+Extractor ───────────────────────────────────────────────────────────┘
+                                                                      ├─Redis: deduplication, host queues, robots cache
+                                                                      └─urls/dynamic-urls──> Fetcher/Renderer ──fetched-pages──> Extractor
 ```
 
 | Component | Responsibility | Durable boundary |
 |---|---|---|
-| Frontier (Zig) | Asynchronous URL admission, filtering, robots evaluation, host scheduling, and dispatch. | Redis admission state and Kafka topics. |
+| Frontier Manager (Zig) | REST ingress, host diagnostics, and dispatch of due work. It does not consume link-discovery backlogs. | Kafka candidate records and Redis scheduler state. |
+| Admission worker (Zig) | Consumer-group replica that normalizes, filters, evaluates robots policy, deduplicates, and admits candidates. | Redis Lua admission transaction. |
 | Fetcher (Go) | Retrieves static HTML; classifies SPA-like documents; stores static content. | MinIO object is written before `fetched-pages` is published. |
 | Renderer (Go) | Runs Chromium for JavaScript pages and stores rendered HTML. | MinIO object is written before `fetched-pages` is published. |
 | Extractor (Zig) | Downloads HTML by key, extracts links/text, publishes cleaned documents. | Kafka `cleaned_documents`. |
-| Embedder (Python/Ray) | Embeds cleaned text, upserts Qdrant, and removes temporary HTML when configured. | Qdrant vector upsert. |
+| Embedder (Python) | Batches cleaned text, runs inference, upserts Qdrant, and durably queues temporary-object cleanup. | A Qdrant batch upsert followed by a Kafka cleanup record. |
+| Cleanup worker (Zig) | Consumes cleanup records and deletes MinIO objects in bounded batches. | MinIO batch deletion and committed Kafka offsets. |
 | Kafka | Topic transport, consumer groups, retry boundaries, and DLQ topics. | Retained records and offsets. |
 
 ## Kafka contracts
@@ -37,11 +39,12 @@ are the executable contract source. The core records are:
 
 | Topic | Key | Value | Producer → consumer |
 |---|---|---|---|
-| `frontier-ingest` | host/domain | raw URL or `render:<url>` | Fetcher → Frontier for a rendering follow-up. |
-| `urls` | domain | raw URL | Frontier → Fetcher. |
+| `discovered-urls` | canonical host/domain | raw URL or `render:<url>` | Frontier Manager, Extractor, or Fetcher → Admission-worker group. |
+| `urls` | domain | raw URL | Frontier → Fetcher. It has 12 partitions so unrelated hot hosts are unlikely to share one consumer lane. |
 | `dynamic-urls` | domain | raw URL | Frontier → Renderer. |
 | `fetched-pages` | URL | `{"url":"…","s3_key":"…"}` | Fetcher/Renderer → Extractor. |
 | `cleaned_documents` | URL | URL, title, text, and `s3_key` JSON | Extractor → Embedder. |
+| `object-cleanup` | `s3_key` | `{"s3_key":"…"}` | Embedder → Cleanup-worker group. |
 | `*-dlq` | URL where available | failure description | A failed stage → operators. |
 
 Large HTML is never a Kafka payload. Fetcher and Renderer save an object first,
@@ -64,19 +67,31 @@ the scheduler’s point of view:
    longest-match precedence with `Allow` winning ties.
 4. In one Redis Lua transaction, claim the URL hash, reserve the host’s next
    slot, enqueue the URL at that timestamp, and update the ready-host index.
-5. A dispatcher atomically claims a ready host, publishes due work, and
-   reschedules the host’s next queued URL.
+5. A dispatcher atomically claims a ready host, publishes exactly one due
+   reservation, and reschedules the host’s next queued URL. It wakes at the
+   earliest ready-host timestamp rather than batching overdue work on a fixed
+   polling interval.
 
 Redis keys use one of 64 fixed hash-tagged shards (`frontier:{shard}:…`). That
 keeps each multi-key Lua transaction within one Redis Cluster slot while
 spreading hosts across shards. The dispatcher does not scan every known host;
 it reads a score-ordered ready-host index instead.
 
-Kafka records are keyed by domain. Fetcher processes each Kafka partition in
+Candidate records are keyed by canonical host. Admission workers form a Kafka
+consumer group and can be scaled independently from the Manager; Kafka lag is
+the bounded candidate buffer. An admission worker performs no local backlog
+handoff: it completes the Redis admission transaction before the consumer
+commits its Kafka record. Fetcher records are keyed by domain. Fetcher processes each Kafka partition in
 offset order and bounds concurrency across partitions, so two records for a
-host do not race between Fetcher replicas. A dynamic page is sent back through
-`frontier-ingest` as `render:<url>`; it reserves a second host slot before the
+host do not race between Fetcher replicas. Bounded per-partition queues prevent
+one hot lane from stopping the consumer from receiving unrelated partitions. A dynamic page is sent back through
+`discovered-urls` as `render:<url>`; it reserves a second host slot before the
 Renderer receives it. This avoids the historical renderer bypass.
+
+Admission totals are stored per Redis scheduler shard, then summed by the
+Manager’s `/metrics` endpoint. This makes `frontier_urls_scheduled_total` and
+`urls_deduped_total` meaningful when admission is handled by separate worker
+replicas, without adding host labels to Prometheus.
 
 ### Deduplication
 
@@ -91,15 +106,31 @@ This is deliberately an **admission** guarantee. It prevents duplicate queued
 work, but a Kafka retry can still cause a worker to process a record again.
 Downstream consumers must therefore be idempotent on URL/object identity.
 
-### Current feedback-loop limitation
+### Embedding throughput and cleanup
 
-The Extractor defaults to publishing discovered links directly to `urls`.
-That path bypasses Frontier admission and therefore does **not** inherit
-robots, deduplication, or politeness guarantees. Deployments that enable link
-recrawl must configure the Extractor’s URL output to `frontier-ingest` (and
-preserve the raw-URL contract) before treating extracted links as safe crawl
-inputs. This is an important deployment constraint, not a solved property of
-the current Compose defaults.
+`cleaned_documents` has 12 partitions and an Embedder deployment uses one model
+per process. Kafka therefore distributes work across normal service replicas;
+there are no nested Ray actors or per-record model workers. Each process gathers
+a bounded batch (default: 32 records or 25 ms), limits the embedding input to
+8,192 characters, calls `SentenceTransformer.encode` once, and sends one
+Qdrant upsert. It commits the batch offsets only after both the upsert and the
+durable `object-cleanup` hand-off succeed. Qdrant point IDs are URL-derived, so
+a replay is an idempotent upsert.
+
+The Embedder never deletes MinIO data on its hot path. The Zig cleanup worker
+collects up to 100 cleanup records and submits them in one MinIO Client delete
+operation. It commits only after deletion succeeds. A crash after deletion but
+before committing may replay a deletion; missing-object deletion is safe. This
+keeps at-least-once delivery without coupling model throughput to object-store
+latency.
+
+### Link feedback
+
+The Extractor publishes discovered links to `discovered-urls`, never directly
+to `urls`. Therefore link feedback receives the same atomic deduplication,
+robots policy, and reserved host slot as external ingress. A self-link can be
+delivered more than once by Kafka, but only the first active crawl window is
+admitted to the Redis host queue.
 
 ## Consistency, retries, and failure handling
 
@@ -143,6 +174,8 @@ metrics system unsafe.
 Useful incident checks are:
 
 - Kafka consumer lag versus Fetcher/Extractor/Embedder throughput;
+- Fetcher end-to-end and per-stage (`origin_fetch`, `object_store_save`, and
+  `produce_fetched_page`) latency histograms;
 - DLQ growth and the associated failure reason;
 - Redis memory, connection count, command latency, and Frontier host backlog;
 - MinIO object failures before `fetched-pages` publication;

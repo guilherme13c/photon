@@ -615,8 +615,8 @@
       "collapsed": false
     },
     {
-      "title": "Metrics Endpoint Latency",
-      "description": "Prometheus scrape response duration for each application's metrics endpoint; this is not per-message processing latency.",
+      "title": "Service latency p50",
+      "description": "Processing latency by service instance. The photon_end_to_end series is measured from Fetcher/Renderer processing start through the successful Qdrant upsert.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -630,8 +630,8 @@
       },
       "targets": [
         {
-          "expr": "scrape_duration_seconds{job=~\"frontier|fetcher|renderer|extractor|embedder\"} * 1000",
-          "legendFormat": "{{job}}"
+          "expr": "histogram_quantile(0.50, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
         }
       ],
       "fieldConfig": {
@@ -656,24 +656,24 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(urls_ingested_total[1m]))",
-          "legendFormat": "frontier URLs/s"
+          "expr": "sum by (job, instance) (rate(urls_ingested_total[5m]))",
+          "legendFormat": "{{job}} {{instance}}"
         },
         {
-          "expr": "sum(rate(fetcher_urls_processed_total[1m]))",
-          "legendFormat": "fetcher URLs/s"
+          "expr": "sum by (job, instance) (rate(fetcher_urls_processed_total{status=\"success\"}[5m]))",
+          "legendFormat": "{{job}} {{instance}}"
         },
         {
-          "expr": "sum(rate(renderer_pages_rendered_total[1m]))",
-          "legendFormat": "renderer pages/s"
+          "expr": "sum by (job, instance) (rate(renderer_pages_rendered_total{status=\"success\"}[5m]))",
+          "legendFormat": "{{job}} {{instance}}"
         },
         {
-          "expr": "sum(rate(html_processed_total[1m]))",
-          "legendFormat": "extractor pages/s"
+          "expr": "sum by (job, instance) (rate(html_processed_total[5m]))",
+          "legendFormat": "{{job}} {{instance}}"
         },
         {
-          "expr": "sum(rate(embedder_messages_processed_total[1m]))",
-          "legendFormat": "embedder documents/s"
+          "expr": "sum by (job, instance) (rate(embedder_messages_processed_total{status=\"success\"}[5m]))",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ],
       "fieldConfig": {
@@ -776,6 +776,58 @@
           "unit": "short"
         }
       }
+    },
+    {
+      "title": "Service latency p75",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 82 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.75, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "title": "Service latency p90",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 82 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "title": "Service latency p95",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 90 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "title": "Service latency p99",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 90 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
     }
   ],
   "schemaVersion": 39,

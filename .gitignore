@@ -23,3 +23,7 @@ extractor/main.o
 **/logs/
 **/log/
 artifacts/
+
+# Local tooling state and generated repository analysis.
+.serena/
+graphify-out/

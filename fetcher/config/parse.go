@@ -28,7 +28,15 @@ func Parse() (*Cfg, error) {
 		KafkaDynamicUrlsTopic: os.Getenv("KAFKA_DYNAMIC_URLS_TOPIC"),
 		KafkaGroup:            os.Getenv("KAFKA_GROUP"),
 		KafkaDlqTopic:         os.Getenv("KAFKA_DLQ_TOPIC"),
+		FrontierURL:           envOrDefault("FRONTIER_URL", "http://frontier:8080"),
 		PrometheusPort:        promPort,
 	}, nil
 
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }

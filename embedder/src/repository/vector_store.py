@@ -47,3 +47,15 @@ class VectorStoreRepository:
             ]
         )
         logger.info(f"VectorStore: Upserted document for URL {url} into Qdrant.")
+
+    def insert_batch(self, documents: list[dict[str, str]], embeddings: Any):
+        """Wait for one Qdrant upsert request containing an entire batch."""
+        points = []
+        for document, embedding in zip(documents, embeddings, strict=True):
+            points.append(models.PointStruct(
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, document["url"])),
+                vector=embedding.tolist() if hasattr(embedding, "tolist") else embedding,
+                payload={"url": document["url"], "title": document["title"], "text": document["text"]},
+            ))
+        if points:
+            self.client.upsert(collection_name=self.collection_name, points=points, wait=True)

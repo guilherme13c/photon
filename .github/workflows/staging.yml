@@ -30,6 +30,10 @@ jobs:
           for mode in load spike stress volume; do
             PHOTON_CAPACITY_MODE="$mode" make test-capacity
           done
+      - name: Report-only benchmark and profiling suite
+        env:
+          PHOTON_ALLOW_BENCHMARKS: '1'
+        run: make benchmark
       - name: Upload staging reports
         if: always()
         uses: actions/upload-artifact@v4

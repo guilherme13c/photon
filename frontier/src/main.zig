@@ -50,17 +50,23 @@ pub fn main(init: std.process.Init) !void {
         init.io,
         redis.interface(),
         kafka_producer.interface(),
-    );
-    try service.startIngestionWorker();
-
-    // Pass the reference to the global atomic boolean
-    var rest_server = RestServer.init(
-        allocator,
-        &service,
-        cfg.port,
-        &keep_running,
+        cfg.kafka_ingest_topic,
     );
 
+    setupSignalHandlers() catch |err| {
+        std.log.err("Signal handler setup failed: {}", .{err});
+    };
+
+    if (std.mem.eql(u8, cfg.role, "admission")) {
+        std.log.info("Starting admission worker for {s}", .{cfg.kafka_ingest_topic});
+        try service.startConsuming(kafka_consumer.interface());
+        return;
+    }
+    if (!std.mem.eql(u8, cfg.role, "manager")) return error.InvalidFrontierRole;
+
+    // Candidate URLs enter the durable Kafka topic through the REST surface;
+    // manager instances do not consume that backlog or perform admission.
+    var rest_server = RestServer.init(allocator, &service, cfg.port, &keep_running);
     var dispatcher = Dispatcher.init(
         allocator,
         redis.interface(),
@@ -69,32 +75,14 @@ pub fn main(init: std.process.Init) !void {
         cfg.kafka_dynamic_urls_topic,
         init.io,
     );
-
-    setupSignalHandlers() catch |err| {
-        std.log.err("Signal handler setup failed: {}", .{err});
-    };
-
-    const kafka_thread = try std.Thread.spawn(
-        .{},
-        Service.startConsuming,
-        .{
-            &service,
-            kafka_consumer.interface(),
-        },
-    );
-    kafka_thread.detach();
-
     const dispatcher_thread = try std.Thread.spawn(
         .{},
         Dispatcher.startPolling,
-        .{
-            &dispatcher,
-            &keep_running,
-        },
+        .{ &dispatcher, &keep_running },
     );
     dispatcher_thread.detach();
 
-    std.log.info("Starting REST Server...", .{});
+    std.log.info("Starting Frontier manager REST server...", .{});
     try rest_server.start();
 
     std.log.info("Process exited cleanly.", .{});

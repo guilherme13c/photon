@@ -15,6 +15,12 @@ pub fn handleRequest(req: *std.http.Server.Request, service: *Service, allocator
         try methods.handleIngest(req, service, allocator);
     } else if (std.mem.eql(u8, path, "/metrics")) {
         try methods.handleMetrics(req, service, allocator);
+    } else if (std.mem.eql(u8, path, "/permits/start")) {
+        if (req.head.method != .POST) {
+            try req.respond("Method Not Allowed", .{ .status = .method_not_allowed });
+            return;
+        }
+        try methods.handleAcquireStartPermit(req, service, allocator);
     } else if (std.mem.startsWith(u8, path, "/debug/hosts") and (path.len == "/debug/hosts".len or path["/debug/hosts".len] == '?')) {
         if (req.head.method != .GET) {
             try req.respond("Method Not Allowed", .{ .status = .method_not_allowed });

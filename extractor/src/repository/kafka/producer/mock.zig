@@ -14,14 +14,14 @@ pub const MockKafkaProducer = struct {
         return .{
             .ptr = self,
             .vtable = &.{
-                .publish_url = publishUrl,
+                .publish_discovered_url = publishDiscoveredUrl,
                 .publish_cleaned_document = publishCleanedDocument,
                 .publish_dead_letter = publishDeadLetter,
             },
         };
     }
 
-    fn publishUrl(ctx: *anyopaque, url: []const u8) anyerror!void {
+    fn publishDiscoveredUrl(ctx: *anyopaque, url: []const u8) anyerror!void {
         _ = url;
         const self: *MockKafkaProducer = @ptrCast(@alignCast(ctx));
         self.published_urls += 1;
@@ -46,7 +46,7 @@ test "MockKafkaProducer tracks publications" {
     var mock = MockKafkaProducer.init();
     const producer = mock.interface();
 
-    try producer.publishUrl("http://example.com");
+    try producer.publishDiscoveredUrl("http://example.com");
     try producer.publishCleanedDocument("http://example.com", "{}");
     
     try std.testing.expectEqual(@as(usize, 1), mock.published_urls);

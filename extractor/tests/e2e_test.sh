@@ -29,7 +29,7 @@ docker exec -i tests-kafka-1 kafka-topics --create --topic extractor-dlq --boots
 echo "KAFKA_BROKERS=127.0.0.1:9092" > ../.env
 echo "MINIO_ENDPOINT=http://127.0.0.1:9000" >> ../.env
 echo "KAFKA_INGEST_TOPIC=fetched-pages" >> ../.env
-echo "KAFKA_URLS_TOPIC=urls" >> ../.env
+echo "KAFKA_DISCOVERED_URLS_TOPIC=discovered-urls" >> ../.env
 echo "KAFKA_CLEANED_TOPIC=cleaned_documents" >> ../.env
 echo "KAFKA_DLQ_TOPIC=extractor-dlq" >> ../.env
 

@@ -8,10 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "contracts" / "v1"
 
 EXPECTED = {
-    "raw-url.json": ("urls", str),
-    "render-url.json": ("frontier-ingest", str),
+    "raw-url.json": ("discovered-urls", str),
+    "render-url.json": ("discovered-urls", str),
     "fetched-page.json": ("fetched-pages", dict),
     "cleaned-document.json": ("cleaned_documents", dict),
+    "object-cleanup.json": ("object-cleanup", dict),
     "dead-letter.json": ("fetcher-dlq", str),
 }
 
@@ -39,6 +40,8 @@ def main():
                     return fail(f"{name}: {field} must be a non-empty string")
         if name == "cleaned-document.json" and not isinstance(value.get("text"), str):
             return fail(f"{name}: text must be a string")
+        if name == "object-cleanup.json" and (not isinstance(value.get("s3_key"), str) or not value["s3_key"]):
+            return fail(f"{name}: s3_key must be a non-empty string")
     invalid = json.loads((ROOT / "tests/contracts/invalid/missing-s3-key.json").read_text())
     if "s3_key" in invalid.get("value", {}):
         return fail("invalid fixture accidentally became valid")

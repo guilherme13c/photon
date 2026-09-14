@@ -8,12 +8,14 @@ import (
 func TestParse(t *testing.T) {
 	// Set environment variables for testing
 	os.Setenv("MAX_ROUTINES", "20")
+	os.Setenv("RENDERER_BROWSER_CONCURRENCY", "4")
 	os.Setenv("KAFKA_BROKER", "localhost:9092")
 	os.Setenv("KAFKA_TOPIC", "test-topic")
 	os.Setenv("KAFKA_PRODUCER_TOPIC", "test-producer-topic")
 	os.Setenv("KAFKA_GROUP", "test-group")
 	defer func() {
 		os.Unsetenv("MAX_ROUTINES")
+		os.Unsetenv("RENDERER_BROWSER_CONCURRENCY")
 		os.Unsetenv("KAFKA_BROKER")
 		os.Unsetenv("KAFKA_TOPIC")
 		os.Unsetenv("KAFKA_PRODUCER_TOPIC")
@@ -27,6 +29,9 @@ func TestParse(t *testing.T) {
 
 	if cfg.MaxRoutines != 20 {
 		t.Errorf("expected MaxRoutines to be 20, got %d", cfg.MaxRoutines)
+	}
+	if cfg.BrowserConcurrency != 4 {
+		t.Errorf("expected BrowserConcurrency to be 4, got %d", cfg.BrowserConcurrency)
 	}
 	if cfg.KafkaBroker != "localhost:9092" {
 		t.Errorf("expected KafkaBroker to be 'localhost:9092', got %s", cfg.KafkaBroker)
@@ -44,7 +49,8 @@ func TestParse(t *testing.T) {
 
 func TestParse_DefaultMaxRoutines(t *testing.T) {
 	os.Unsetenv("MAX_ROUTINES")
-	
+	os.Unsetenv("RENDERER_BROWSER_CONCURRENCY")
+
 	cfg, err := Parse()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -52,5 +58,21 @@ func TestParse_DefaultMaxRoutines(t *testing.T) {
 
 	if cfg.MaxRoutines != 10 {
 		t.Errorf("expected default MaxRoutines to be 10, got %d", cfg.MaxRoutines)
+	}
+	if cfg.BrowserConcurrency != 2 {
+		t.Errorf("expected default BrowserConcurrency to be 2, got %d", cfg.BrowserConcurrency)
+	}
+}
+
+func TestParse_ClampsBrowserConcurrencyToWorkerCount(t *testing.T) {
+	t.Setenv("MAX_ROUTINES", "3")
+	t.Setenv("RENDERER_BROWSER_CONCURRENCY", "10")
+
+	cfg, err := Parse()
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if cfg.BrowserConcurrency != 3 {
+		t.Errorf("expected BrowserConcurrency to be clamped to 3, got %d", cfg.BrowserConcurrency)
 	}
 }

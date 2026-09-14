@@ -17,8 +17,8 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
         config.kafka_ingest_topic = try allocator.dupe(u8, std.mem.span(val));
     }
 
-    if (std.c.getenv("KAFKA_URLS_TOPIC")) |val| {
-        config.kafka_urls_topic = try allocator.dupe(u8, std.mem.span(val));
+    if (std.c.getenv("KAFKA_DISCOVERED_URLS_TOPIC")) |val| {
+        config.kafka_discovered_urls_topic = try allocator.dupe(u8, std.mem.span(val));
     }
 
     if (std.c.getenv("KAFKA_CLEANED_TOPIC")) |val| {
@@ -92,8 +92,8 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
             config.kafka_group_id = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_INGEST_TOPIC")) {
             config.kafka_ingest_topic = try allocator.dupe(u8, val);
-        } else if (std.mem.eql(u8, key, "KAFKA_URLS_TOPIC")) {
-            config.kafka_urls_topic = try allocator.dupe(u8, val);
+        } else if (std.mem.eql(u8, key, "KAFKA_DISCOVERED_URLS_TOPIC")) {
+            config.kafka_discovered_urls_topic = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_CLEANED_TOPIC")) {
             config.kafka_cleaned_topic = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_DLQ_TOPIC")) {

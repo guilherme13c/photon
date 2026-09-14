@@ -25,11 +25,11 @@ Prometheus is configured with 9 scrape targets covering the full pipeline:
 
 | Service | Language | Port | Endpoint | Metrics |
 |---------|----------|------|----------|---------|
-| Frontier | Zig | 8080 | `/metrics` | `urls_ingested_total`, `urls_filtered_total`, `urls_deduped_total` |
-| Fetcher | Go | 2112 | `/metrics` | `fetcher_urls_processed_total{status}` |
-| Renderer | Go | 3000 | `/metrics` | `renderer_pages_rendered_total{status}` |
-| Extractor | Zig | 8001 | `/metrics` | `html_processed_total`, `urls_extracted_total`, `documents_produced_total` |
-| Embedder | Python | 8000 | `/metrics` | `embedder_messages_processed_total{status}` |
+| Frontier | Zig | 8080 | `/metrics` | `urls_ingested_total`, `urls_filtered_total`, `urls_deduped_total`, `frontier_admission_duration_seconds` |
+| Fetcher | Go | 2112 | `/metrics` | `fetcher_urls_processed_total{status}`, `fetcher_process_duration_seconds`, `fetcher_stage_duration_seconds{stage}`, `fetcher_in_flight` |
+| Renderer | Go | 3000 | `/metrics` | `renderer_pages_rendered_total{status}`, `renderer_process_duration_seconds`, `renderer_in_flight` |
+| Extractor | Zig | 8001 | `/metrics` | `html_processed_total`, `urls_extracted_total`, `documents_produced_total`, `extractor_process_duration_seconds` |
+| Embedder | Python | 8000 | `/metrics` | `embedder_messages_processed_total{status}`, `embedder_batches_processed_total{status}`, `embedder_process_duration_seconds`, `embedder_stage_duration_seconds{stage}`, `embedder_in_flight` |
 
 ### Infrastructure
 
@@ -48,10 +48,17 @@ All Prometheus ports for custom services are configurable via environment variab
 |----------|---------|---------|
 | `FETCHER_PROMETHEUS_PORT` | `2112` | Fetcher |
 | `EMBEDDER_PROMETHEUS_PORT` | `8000` | Embedder |
+| `PHOTON_EMBED_BATCH_SIZE` | `32` | Embedder records per inference/Qdrant batch |
+| `PHOTON_EMBED_BATCH_WAIT_MS` | `25` | Maximum batch collection wait |
+| `PHOTON_EMBED_MAX_TEXT_CHARS` | `8192` | Input bound before tokenization |
+| `PHOTON_CLEANUP_BATCH_WAIT_MS` | `100` | Cleanup-worker batch collection wait |
 | `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor |
 | `PROMETHEUS_PORT` | `9090` | Prometheus server host port |
 
 The frontier serves metrics on the same port as its REST API (default `8080`).
+Scheduling and deduplication totals are aggregated from the Redis scheduler
+shards, so they include every admission-worker replica rather than only the
+Manager process.
 The renderer serves metrics on port `3000`.
 
 ## File Structure
@@ -69,6 +76,13 @@ config/
 
 ## Grafana Dashboard Panels
 
+The **Service Performance** section shows successful throughput grouped by
+Prometheus `job` and `instance`, so replicas remain individually visible. It
+also shows p50, p75, p90, p95, and p99 processing latency from the service
+histograms. `photon_end_to_end_duration_seconds` is emitted after a successful
+Qdrant upsert; it measures from the Fetcher or Renderer processing start to
+that terminal write. It intentionally has no URL or host label.
+
 The **Photon Pipeline** dashboard includes:
 
 ### Pipeline Overview (Row 1)
@@ -84,6 +98,11 @@ The **Photon Pipeline** dashboard includes:
 - Fetcher & Renderer Rate — `rate(fetcher_urls_processed_total{status="success"}[1m])`, `rate(renderer_pages_rendered_total{status="success"}[1m])`
 - Extractor & Embedder Rate — `rate(html_processed_total[1m])`, `rate(documents_produced_total[1m])`
 - Embeddings Rate — `rate(embedder_messages_processed_total[1m])` by status
+
+Benchmark runs also use the processing-duration histograms and in-flight gauges
+to attribute lag to a stage without adding URL or host labels. The Go pprof
+endpoints are disabled by default and are enabled only by
+`PHOTON_ENABLE_PPROF=1` in the disposable benchmark Compose deployment.
 
 ### Infrastructure (Row 3)
 - Kafka Consumer Group Lag — `kafka_consumergroup_lag`
