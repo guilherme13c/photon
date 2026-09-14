@@ -27,6 +27,18 @@ def invoke(path):
     return handler.status, json.loads(handler.wfile.getvalue())
 
 
+def invoke_static(path):
+    handler_class = make_handler(Embedder(), Repository())
+    handler = handler_class.__new__(handler_class)
+    handler.path = path
+    handler.wfile = BytesIO()
+    handler.send_response = lambda status: setattr(handler, "status", status)
+    handler.send_header = lambda *_args: None
+    handler.end_headers = lambda: None
+    handler.do_GET()
+    return handler.status, handler.wfile.getvalue()
+
+
 def test_search_http_endpoint_returns_json_results():
     status, response = invoke("/v1/search?q=photon&limit=1")
     assert status == 200
@@ -38,3 +50,16 @@ def test_search_http_endpoint_rejects_empty_query():
     status, response = invoke("/v1/search?q=")
     assert status == 400
     assert response["error"]
+
+
+def test_root_serves_search_frontend():
+    status, body = invoke_static("/")
+    assert status == 200
+    assert b"Photon Search" in body
+    assert b"/app.js" in body
+
+
+def test_frontend_assets_are_served():
+    status, body = invoke_static("/app.js")
+    assert status == 200
+    assert b"/v1/search" in body

@@ -54,6 +54,14 @@ The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`.
 `/readyz` checks the configured Qdrant collection. Model loading happens before
 the HTTP server starts, so a running service has a loaded local model.
 
+## Web interface
+
+The same service serves a small vanilla HTML/CSS/JavaScript client at `/`.
+It submits queries to `/v1/search`, renders source links and similarity scores,
+and uses the opaque `next_cursor` for the **Load more results** action. This
+keeps the browser client and API on the same origin, so no CORS configuration
+is required.
+
 ## Observability
 
 `GET /metrics` exposes request and result counters plus a request-duration

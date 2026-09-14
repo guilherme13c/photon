@@ -1,16 +1,24 @@
 import json
+import mimetypes
 import time
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .service import SearchService
 
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-def make_handler(embedder, repository, metrics=None):
+
+def make_handler(embedder, repository, metrics=None, static_dir=STATIC_DIR):
     service = SearchService(embedder, repository)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            path = urlparse(self.path).path
+            if path == "/" or path.startswith("/assets/") or path in ("/app.js", "/styles.css"):
+                self._serve_static(path)
+                return
             if self.path == "/healthz":
                 self._write(200, {"status": "ok"})
                 return
@@ -27,7 +35,7 @@ def make_handler(embedder, repository, metrics=None):
                 self.end_headers()
                 self.wfile.write((metrics.render() if metrics else "").encode())
                 return
-            if urlparse(self.path).path != "/v1/search":
+            if path != "/v1/search":
                 self._write(404, {"error": "not found"})
                 return
             query = parse_qs(urlparse(self.path).query)
@@ -54,6 +62,25 @@ def make_handler(embedder, repository, metrics=None):
             body = json.dumps(payload).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _serve_static(self, path):
+            relative = "index.html" if path == "/" else path.lstrip("/")
+            candidate = (Path(static_dir) / relative).resolve()
+            root = Path(static_dir).resolve()
+            if root not in candidate.parents and candidate != root:
+                self._write(404, {"error": "not found"})
+                return
+            try:
+                body = candidate.read_bytes()
+            except OSError:
+                self._write(404, {"error": "not found"})
+                return
+            content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

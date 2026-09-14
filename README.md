@@ -51,6 +51,7 @@ The machine learning pipeline responsible for generating vector embeddings.
 
 ### 6. Search (Python)
 - **API:** Exposes `GET /v1/search?q=...&limit=...&cursor=...` for semantic search with pagination.
+- **Web UI:** Serves a lightweight vanilla HTML/CSS/JavaScript search client at `/`.
 - **Inference:** Loads `all-MiniLM-L6-v2` locally in the Search process.
 - **Storage:** Queries the `photon_documents` Qdrant collection and returns chunk metadata and similarity scores.
 - **Metrics:** Exposes `/metrics` with request throughput, status counters, result counts, and request latency buckets.
@@ -109,6 +110,7 @@ Key environment variables:
 
 ### Monitoring
 Once the stack is running:
+- **Search UI:** [http://localhost:8082](http://localhost:8082)
 - **Grafana:** [http://localhost:3001](http://localhost:3001) (login: `admin` / `admin`)
 - **Prometheus:** [http://localhost:9090](http://localhost:9090)
 
