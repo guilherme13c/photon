@@ -47,6 +47,17 @@ type Service struct {
 	dlqTopic      string
 }
 
+// DeadLetter durably records an unrecoverable processing failure so the caller
+// can commit the source offset and keep the Kafka partition moving.
+func (s *Service) DeadLetter(ctx context.Context, msg consumer.Message, err error) error {
+	if err == nil { return nil }
+	if dlqErr := s.producer.Produce(ctx, s.dlqTopic, msg.Key, []byte(err.Error())); dlqErr != nil {
+		return fmt.Errorf("publish processing failure to DLQ: %w", dlqErr)
+	}
+	urlsProcessed.WithLabelValues("dlq").Inc()
+	return nil
+}
+
 func NewService(client http_client.Client, st storage.Storage, pr producer.Producer, producerTopic string, dynamicTopic string, dlqTopic string) *Service {
 	return &Service{
 		client:        client,

@@ -136,6 +136,10 @@ func processPartition(ctx context.Context, svc *service.Service, messages <-chan
 					}
 					break
 				}
+				if dlqErr := svc.DeadLetter(ctx, msg, err); dlqErr == nil {
+					select { case completed <- msg: case <-ctx.Done(): }
+					break
+				}
 				log.Printf("processing partition %d offset %d failed: %v; retrying", msg.Partition, msg.Offset, err)
 				select {
 				case <-time.After(time.Second):
