@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"html"
 	"log"
 	"os"
 
@@ -14,6 +15,14 @@ import (
 type storageImpl struct {
 	client *minio.Client
 	bucket string
+}
+
+// objectNameForURL produces a MinIO-safe, deterministic key. Extracted HTML
+// commonly contains escaped query separators (&amp;); decode those before
+// encoding so retries and canonical URLs map to the same object.
+func objectNameForURL(rawURL string) string {
+	canonical := html.UnescapeString(rawURL)
+	return base64.RawURLEncoding.EncodeToString([]byte(canonical)) + ".html"
 }
 
 func NewStorage() Storage {
@@ -54,7 +63,7 @@ func NewStorage() Storage {
 func (s *storageImpl) Save(ctx context.Context, doc Document) (string, error) {
 	reader := bytes.NewReader([]byte(doc.Content))
 	
-	objectName := base64.URLEncoding.EncodeToString([]byte(doc.URL)) + ".html"
+	objectName := objectNameForURL(doc.URL)
 	
 	_, err := s.client.PutObject(ctx, s.bucket, objectName, reader, int64(len(doc.Content)), minio.PutObjectOptions{
 		ContentType: "text/html",
@@ -73,4 +82,3 @@ func (s *storageImpl) Close() error {
 	// MinIO client doesn't need to be explicitly closed
 	return nil
 }
-
