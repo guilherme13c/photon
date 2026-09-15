@@ -10,17 +10,31 @@ class FakeEmbedder:
 
 
 class FakeRepository:
-    def search(self, vector, limit, offset):
-        self.args = vector, limit, offset
+    def search(self, vector, limit, offset, **kwargs):
+        self.args = vector, limit, offset, kwargs
         return [{"id": "one", "score": 0.9, "text": "result", "chunk_index": 0}]
+
+
+class FakeSparseEncoder:
+    def encode(self, texts):
+        assert texts == ["photon"]
+        return [{"indices": [1], "values": [1.0]}]
 
 
 def test_service_embeds_query_and_searches_repository():
     embedder, repository = FakeEmbedder(), FakeRepository()
     response = SearchService(embedder, repository).search(" photon ", 10, "")
     assert embedder.text == "photon"
-    assert repository.args == ([0.1, 0.2], 10, 0)
+    assert repository.args[:3] == ([0.1, 0.2], 10, 0)
     assert response["results"][0]["id"] == "one"
+
+
+def test_service_builds_both_query_representations():
+    embedder, repository = FakeEmbedder(), FakeRepository()
+    response = SearchService(embedder, repository, sparse_encoder=FakeSparseEncoder()).search("photon", 10, "")
+    assert response["results"]
+    assert repository.args[0] == [0.1, 0.2]
+    assert repository.args[3]["sparse_vector"]["indices"] == [1]
 
 
 def test_validate_request_defaults_and_rejects_bad_input():

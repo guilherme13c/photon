@@ -52,7 +52,12 @@ class SearchService:
     def search(self, query, limit, cursor):
         query, limit, cursor = validate_request(query, limit, cursor)
         offset = decode_cursor(query, cursor)
-        results = self.repository.search(self.embedder.embed(query), limit, offset)
+        dense_vector = self.embedder.embed(query)
+        if self.sparse_encoder:
+            sparse_vector = self.sparse_encoder.encode([query])[0]
+            results = self.repository.search(dense_vector, limit, offset, sparse_vector=sparse_vector)
+        else:
+            results = self.repository.search(dense_vector, limit, offset)
         response = {"results": results}
         if len(results) == limit:
             response["next_cursor"] = encode_cursor(query, offset + len(results))

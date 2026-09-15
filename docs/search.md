@@ -1,6 +1,6 @@
 # Search API contract
 
-The Python search service exposes semantic search over the vectors in Qdrant.
+The Python search service exposes hybrid dense + lexical search over named vectors in Qdrant.
 
 Queries use the local `all-MiniLM-L6-v2` SentenceTransformer model. The model
 must match the model used by the indexing Embedder and produces 384-dimensional

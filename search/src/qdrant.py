@@ -1,4 +1,4 @@
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 
 
 class QdrantRepository:
@@ -6,14 +6,31 @@ class QdrantRepository:
         self.client = QdrantClient(url=url, api_key=api_key or None)
         self.collection = collection
 
-    def search(self, vector, limit, offset):
+    def search(self, vector, limit, offset, sparse_vector=None, candidate_limit=None):
+        if sparse_vector is None:
+            return self._search_dense(vector, limit, offset)
+        candidate_limit = candidate_limit or max(50, limit * 5)
         response = self.client.query_points(
             collection_name=self.collection,
-            query=vector,
+            prefetch=[
+                models.Prefetch(query=vector, using="dense", limit=candidate_limit),
+                models.Prefetch(query=sparse_vector, using="sparse", limit=candidate_limit),
+            ],
+            query=models.FusionQuery(fusion=models.Fusion.RRF),
             limit=limit,
             offset=offset,
             with_payload=True,
         )
+        return self._results(response)
+
+    def _search_dense(self, vector, limit, offset):
+        response = self.client.query_points(
+            collection_name=self.collection, query=vector, limit=limit, offset=offset, with_payload=True
+        )
+        return self._results(response)
+
+    @staticmethod
+    def _results(response):
         results = []
         for point in response.points:
             payload = point.payload or {}
