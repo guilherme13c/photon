@@ -8,6 +8,11 @@ const Normalizer = @import("normalization.zig").Normalizer;
 const Filter = @import("filter.zig").Filter;
 const RobotsChecker = @import("robots.zig").RobotsChecker;
 const Scheduler = @import("scheduler.zig").Scheduler;
+const Sitemap = @import("sitemap.zig");
+
+fn schemeFor(url: []const u8) []const u8 {
+    return if (std.mem.startsWith(u8, url, "https://")) "https" else "http";
+}
 
 pub const processing_latency_bucket_ns = [_]u64{
     5_000_000,   10_000_000,  25_000_000,    50_000_000,    100_000_000,
@@ -132,6 +137,28 @@ pub const Service = struct {
                 "Robots: Disallowed by domain policy",
             );
             return;
+        }
+
+        // Seed each origin's declared sitemaps once. Sitemap documents flow
+        // through the normal fetcher/extractor path; their <loc> entries are
+        // then admitted like HTML-discovered links.
+        const sitemap_marker = try std.fmt.allocPrint(self.allocator, "sitemap-seeded:{s}", .{domain});
+        defer self.allocator.free(sitemap_marker);
+        const already_seeded = try self.cache.getCache(self.allocator, sitemap_marker);
+        if (already_seeded) |value| {
+            self.allocator.free(value);
+        } else {
+            const robots_key = try std.fmt.allocPrint(self.allocator, "robots:{s}:{s}", .{ schemeFor(normalized.canonical), domain });
+            defer self.allocator.free(robots_key);
+            if (try self.cache.getCache(self.allocator, robots_key)) |policy| {
+                defer self.allocator.free(policy);
+                const declared = try Sitemap.declarations(self.allocator, policy, 8);
+                defer { for (declared) |sitemap_url| self.allocator.free(sitemap_url); self.allocator.free(declared); }
+                for (declared) |sitemap_url| self.processUrl(sitemap_url) catch |err| {
+                    std.log.warn("Failed to schedule sitemap {s}: {}", .{ sitemap_url, err });
+                };
+            }
+            try self.cache.setCache(sitemap_marker, "1", 86400);
         }
 
         const current_time: i64 = @intCast(std.Io.Clock.real.now(self.io).toMilliseconds());
