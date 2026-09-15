@@ -54,3 +54,15 @@ test "Filter rejects blacklisted extensions and long URLs" {
     };
     try std.testing.expect(filter.isAllowed(good_url));
 }
+
+test "Filter allows blog and social post URL shapes" {
+    const filter = Filter.init();
+    const urls = [_][]const u8{
+        "https://example.com/blog/2026/launch?utm_source=x",
+        "https://www.reddit.com/r/programming/comments/abc123/title/",
+        "https://www.facebook.com/example/posts/123456789",
+    };
+    for (urls) |canonical| {
+        try std.testing.expect(filter.isAllowed(.{ .hash = 1, .canonical = canonical }));
+    }
+}

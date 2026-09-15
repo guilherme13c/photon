@@ -78,6 +78,16 @@ https://www.bbc.com/
 https://www.theguardian.com/
 https://www.reuters.com/
 https://www.npr.org/
+
+# Blogs, forums, and public social/community pages.
+https://dev.to/
+https://medium.com/
+https://wordpress.com/
+https://blogger.com/
+https://news.ycombinator.com/
+https://www.reddit.com/r/programming/
+https://www.reddit.com/r/technology/
+https://www.facebook.com/
 https://www.nationalgeographic.com/
 https://www.imdb.com/
 https://www.w3schools.com/
