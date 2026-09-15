@@ -33,6 +33,12 @@ def parse_cleaned_document(data: Any) -> dict[str, Any]:
     if not data.get("url"):
         raise ValueError("url must be a non-empty string")
 
+    if "outbound_urls" in data and (
+        not isinstance(data["outbound_urls"], list)
+        or not all(isinstance(url, str) for url in data["outbound_urls"])
+    ):
+        raise ValueError("outbound_urls must be a list of strings")
+
     if version == 2:
         optional_string_fields = ("canonical_url", "main_text", "content_hash", "language", "content_type")
         for field in optional_string_fields:

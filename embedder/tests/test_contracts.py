@@ -26,18 +26,21 @@ def test_v2_payload_accepts_normalized_fields():
         "language": "en",
         "content_type": "article",
         "quality_score": 0.9,
+        "outbound_urls": ["https://example.test/two"],
         "s3_key": "one.html",
     })
 
     assert document["version"] == 2
     assert document["quality_score"] == 0.9
     assert document["content_hash"] == "abc123"
+    assert document["outbound_urls"] == ["https://example.test/two"]
 
 
 @pytest.mark.parametrize("payload", [
     {"version": 3, "url": "u", "title": "t", "text": "x", "s3_key": "k"},
     {"version": 2, "url": "u", "title": "t", "text": "x", "s3_key": "k", "quality_score": 2},
     {"version": 2, "url": "u", "title": "t", "text": "x", "s3_key": "k", "language": 4},
+    {"version": 2, "url": "u", "title": "t", "text": "x", "s3_key": "k", "outbound_urls": [4]},
 ])
 def test_invalid_versions_and_fields_are_rejected(payload):
     with pytest.raises(ValueError):

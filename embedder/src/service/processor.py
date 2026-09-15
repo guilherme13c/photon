@@ -103,6 +103,7 @@ class EmbeddingProcessorService:
                             "pipeline_started_at_ms": pipeline_started_at_ms,
                             "correlation_id": correlation_id,
                             "content_hash": content_hash,
+                            "outbound_urls": data.get("outbound_urls", []),
                         })
                     else:
                         embeddings_processed_total.labels(status="empty").inc()

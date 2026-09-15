@@ -58,6 +58,22 @@ The service supports these environment variables:
 | `QDRANT_DENSE_VECTOR_NAME` | `dense` | Named dense vector in the collection. |
 | `QDRANT_SPARSE_VECTOR_NAME` | `sparse` | Named sparse lexical vector in the collection. |
 | `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
+| `SEARCH_AUTHORITY_WEIGHT` | `0.08` | Bounded (0–0.25) PageRank authority contribution to final candidate ordering. |
+
+## Link authority
+
+The Extractor stores each indexed page's resolved outbound links with the
+document payload. Recompute document-level PageRank after a crawl (or on a
+schedule) and write normalized `authority_score` values into Qdrant:
+
+```bash
+python scripts/recompute_pagerank.py --url http://localhost:6333
+```
+
+Only links between documents already indexed by Photon are included. Search
+retrieval first filters candidates by textual relevance, then applies the small
+authority weight to break close ties; PageRank never replaces text relevance.
+Existing documents need to be recrawled before they contain link edges.
 
 The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`.
 `/readyz` checks the configured Qdrant collection. Model loading happens before

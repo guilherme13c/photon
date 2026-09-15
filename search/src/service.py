@@ -5,7 +5,7 @@ import json
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
-RETRIEVAL_VERSION = "hybrid-rrf-v2"
+RETRIEVAL_VERSION = "hybrid-rrf-pagerank-v3"
 MIN_SCORE = 0.5
 
 
@@ -47,10 +47,11 @@ def decode_cursor(query, value):
 
 
 class SearchService:
-    def __init__(self, embedder, repository, sparse_encoder=None):
+    def __init__(self, embedder, repository, sparse_encoder=None, authority_weight=0.0):
         self.embedder = embedder
         self.repository = repository
         self.sparse_encoder = sparse_encoder
+        self.authority_weight = max(0.0, min(float(authority_weight), 0.25))
 
     def search(self, query, limit, cursor):
         query, limit, cursor = validate_request(query, limit, cursor)
@@ -62,6 +63,12 @@ class SearchService:
         else:
             results = self.repository.search(dense_vector, limit, offset)
         results = [item for item in results if float(item.get("score", 0.0)) >= MIN_SCORE]
+        if self.authority_weight:
+            for item in results:
+                text_score = float(item["score"])
+                authority = max(0.0, min(float(item.get("authority_score", 0.0)), 1.0))
+                item["score"] = round((1 - self.authority_weight) * text_score + self.authority_weight * authority, 6)
+            results.sort(key=lambda item: item["score"], reverse=True)
         response = {"results": results, "retrieval": "hybrid_rrf" if self.sparse_encoder else "dense"}
         if len(results) == limit:
             response["next_cursor"] = encode_cursor(query, offset + len(results))

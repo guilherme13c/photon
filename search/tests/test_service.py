@@ -68,3 +68,16 @@ def test_validate_request_defaults_and_rejects_bad_input():
 def test_service_filters_results_below_minimum_score():
     response = SearchService(FakeEmbedder(), MixedRepository()).search("photon", 10, "")
     assert [item["id"] for item in response["results"]] == ["high"]
+
+
+def test_service_uses_authority_to_rerank_textually_relevant_candidates():
+    class AuthorityRepository(FakeRepository):
+        def search(self, *_args, **_kwargs):
+            return [
+                {"id": "text-first", "score": 0.9, "authority_score": 0.0},
+                {"id": "authoritative", "score": 0.85, "authority_score": 1.0},
+            ]
+
+    response = SearchService(FakeEmbedder(), AuthorityRepository(), authority_weight=0.1).search("photon", 10, "")
+    assert [item["id"] for item in response["results"]] == ["authoritative", "text-first"]
+    assert response["results"][0]["score"] == 0.865

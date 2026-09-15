@@ -10,8 +10,8 @@ from .service import SearchService
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
-def make_handler(embedder, repository, metrics=None, static_dir=STATIC_DIR, sparse_encoder=None):
-    service = SearchService(embedder, repository, sparse_encoder=sparse_encoder)
+def make_handler(embedder, repository, metrics=None, static_dir=STATIC_DIR, sparse_encoder=None, authority_weight=0.0):
+    service = SearchService(embedder, repository, sparse_encoder=sparse_encoder, authority_weight=authority_weight)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):

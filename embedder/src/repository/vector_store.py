@@ -84,6 +84,7 @@ class VectorStoreRepository:
                     "chunk_index": document.get("chunk_index", 0),
                     "chunk_count": document.get("chunk_count", 1),
                     "content_hash": document.get("content_hash"),
+                    "outbound_urls": document.get("outbound_urls", []),
                 },
             ))
         if points:

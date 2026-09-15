@@ -66,12 +66,18 @@ pub const Service = struct {
         _ = self.urls_extracted_total.fetchAdd(parsed.links.items.len, .monotonic);
 
         // Produce extracted links
+        var outbound_urls = std.ArrayList([]const u8).empty;
+        defer {
+            for (outbound_urls.items) |outbound_url| self.allocator.free(outbound_url);
+            outbound_urls.deinit(self.allocator);
+        }
         for (parsed.links.items) |link| {
             if (link.len == 0 or std.mem.startsWith(u8, link, "javascript:") or std.mem.startsWith(u8, link, "mailto:")) {
                 continue;
             }
             if (self.resolveUrl(url, link)) |resolved| {
                 defer self.allocator.free(resolved);
+                try outbound_urls.append(self.allocator, try self.allocator.dupe(u8, resolved));
                 self.producer.publishDiscoveredUrl(resolved) catch |err| {
                     std.log.err("Failed to publish extracted URL {s}: {}", .{ resolved, err });
                     continue;
@@ -92,6 +98,7 @@ pub const Service = struct {
             quality_score: f32,
             content_type: []const u8,
             content_hash: []const u8,
+            outbound_urls: []const []const u8,
             s3_key: []const u8,
             pipeline_started_at_ms: ?i64,
             correlation_id: ?[]const u8,
@@ -106,6 +113,7 @@ pub const Service = struct {
             .quality_score = parsed.quality_score,
             .content_type = parsed.content_type,
             .content_hash = parsed.content_hash,
+            .outbound_urls = outbound_urls.items,
             .s3_key = s3_key,
             .pipeline_started_at_ms = pipeline_started_at_ms,
             .correlation_id = correlation_id,
