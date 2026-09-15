@@ -41,8 +41,8 @@ are the executable contract source. The core records are:
 | Topic | Key | Value | Producer → consumer |
 |---|---|---|---|
 | `discovered-urls` | canonical host/domain | raw URL or `render:<url>` | Frontier Manager, Extractor, or Fetcher → Admission-worker group. |
-| `urls` | domain | raw URL | Frontier → Fetcher. It has 12 partitions so unrelated hot hosts are unlikely to share one consumer lane. |
-| `dynamic-urls` | domain | raw URL | Frontier → Renderer. |
+| `urls` | stable URL hash | raw URL | Frontier → Fetcher. Partitioning distributes records across consumers; Frontier's just-in-time origin permit remains the politeness authority. |
+| `dynamic-urls` | stable URL hash | raw URL | Frontier → Renderer. |
 | `fetched-pages` | URL | `{"url":"…","s3_key":"…"}` | Fetcher/Renderer → Extractor. |
 | `cleaned_documents` | URL | v1: URL, title, text, and `s3_key`; v2 additionally carries normalized-content metadata | Extractor → Embedder. |
 | `object-cleanup` | `s3_key` | `{"s3_key":"…"}` | Embedder → Cleanup-worker group. |

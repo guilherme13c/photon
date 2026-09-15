@@ -59,7 +59,13 @@ pub const Dispatcher = struct {
                         const is_render = std.mem.startsWith(u8, url, "render:");
                         const target_topic = if (is_render) self.dynamic_urls_topic else self.urls_topic;
                         const target_url = if (is_render) url["render:".len..] else url;
-                        self.producer.publishUrl(target_topic, domain, target_url) catch |err| {
+                        // Distribute records by URL hash. Origin politeness is
+                        // enforced independently by Frontier's start-permit
+                        // endpoint, so Kafka partitioning must not serialize a
+                        // whole origin onto one consumer.
+                        var key_buf: [32]u8 = undefined;
+                        const partition_key = std.fmt.bufPrint(&key_buf, "url:{x}", .{std.hash.Wyhash.hash(0, target_url)}) catch unreachable;
+                        self.producer.publishUrl(target_topic, partition_key, target_url) catch |err| {
                             std.log.err("Failed to publish URL to fetcher: {}", .{err});
                         };
                     }
