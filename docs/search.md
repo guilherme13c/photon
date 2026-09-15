@@ -47,7 +47,7 @@ The service supports these environment variables:
 | `MODEL_NAME` | `all-MiniLM-L6-v2` | Local SentenceTransformer model. |
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant endpoint. |
 | `QDRANT_API_KEY` | empty | Optional Qdrant API key. |
-| `QDRANT_COLLECTION_NAME` | `photon_documents` | Vector collection. |
+| `QDRANT_COLLECTION_NAME` | `photon_documents_hybrid` | Dense+sparse hybrid vector collection. |
 | `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
 
 The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`.

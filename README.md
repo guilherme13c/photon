@@ -53,7 +53,7 @@ The machine learning pipeline responsible for generating vector embeddings.
 - **API:** Exposes `GET /v1/search?q=...&limit=...&cursor=...` for semantic search with pagination.
 - **Web UI:** Serves a lightweight vanilla HTML/CSS/JavaScript search client at `/`.
 - **Inference:** Loads `all-MiniLM-L6-v2` locally in the Search process.
-- **Storage:** Queries the `photon_documents` Qdrant collection and returns chunk metadata and similarity scores.
+- **Storage:** Queries the `photon_documents_hybrid` Qdrant collection and returns chunk metadata and hybrid relevance scores.
 - **Metrics:** Exposes `/metrics` with request throughput, status counters, result counts, and request latency buckets.
 
 ### 7. Infrastructure

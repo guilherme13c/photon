@@ -22,7 +22,7 @@ def main():
     logging.basicConfig(level=logging.INFO)
     model_name = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
     model = SentenceTransformer(model_name)
-    repository = QdrantRepository(os.getenv("QDRANT_URL", "http://qdrant:6333"), os.getenv("QDRANT_COLLECTION_NAME", "photon_documents"), os.getenv("QDRANT_API_KEY", ""))
+    repository = QdrantRepository(os.getenv("QDRANT_URL", "http://qdrant:6333"), os.getenv("QDRANT_COLLECTION_NAME", "photon_documents_hybrid"), os.getenv("QDRANT_API_KEY", ""))
     metrics = Metrics()
     port = int(os.getenv("SEARCH_PORT", "8082"))
     server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(LocalEmbedder(model), repository, metrics))

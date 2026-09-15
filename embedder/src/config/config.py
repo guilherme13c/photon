@@ -17,7 +17,7 @@ class Config:
         self.chunk_overlap_tokens = int(os.getenv("EMBED_CHUNK_OVERLAP_TOKENS", "60"))
         self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key = os.getenv("QDRANT_API_KEY", "")
-        self.qdrant_collection_name = os.getenv("QDRANT_COLLECTION_NAME", "photon_documents")
+        self.qdrant_collection_name = os.getenv("QDRANT_COLLECTION_NAME", "photon_documents_hybrid")
         self.prometheus_port = int(os.getenv("PROMETHEUS_PORT", "8000"))
         
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
