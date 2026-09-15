@@ -68,7 +68,8 @@ class VectorStoreRepository:
     def insert_batch(self, documents: list[dict[str, str]], embeddings: Any, sparse_embeddings: Any = None):
         """Wait for one Qdrant upsert request containing an entire batch."""
         points = []
-        sparse_embeddings = sparse_embeddings or [None] * len(documents)
+        if sparse_embeddings is None:
+            sparse_embeddings = [None] * len(documents)
         for document, embedding, sparse_embedding in zip(documents, embeddings, sparse_embeddings, strict=True):
             vector = {self.dense_vector_name: embedding.tolist() if hasattr(embedding, "tolist") else embedding}
             if sparse_embedding is not None:
