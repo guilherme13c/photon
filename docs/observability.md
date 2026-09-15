@@ -145,6 +145,8 @@ Metrics use the standard `prometheus/client_golang` library with `promhttp.Handl
 
 ### Python Service (Embedder)
 Metrics use the `prometheus_client` library with `start_http_server()`.
+The `embedder_stage_duration_seconds` histogram separates text preparation,
+dense model encoding, sparse encoding, Qdrant upsert, and cleanup enqueue.
 
 ### Infrastructure Exporters
 Kafka and Redis use community exporter sidecars deployed as additional Docker Compose services. MinIO and Qdrant expose native Prometheus endpoints that are scraped directly.
