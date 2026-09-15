@@ -1,4 +1,5 @@
 qdrant-client
+fastembed
 sentence-transformers
 torch==2.5.1+cpu
 prometheus-client

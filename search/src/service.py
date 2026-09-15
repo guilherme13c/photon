@@ -44,9 +44,10 @@ def decode_cursor(query, value):
 
 
 class SearchService:
-    def __init__(self, embedder, repository):
+    def __init__(self, embedder, repository, sparse_encoder=None):
         self.embedder = embedder
         self.repository = repository
+        self.sparse_encoder = sparse_encoder
 
     def search(self, query, limit, cursor):
         query, limit, cursor = validate_request(query, limit, cursor)

@@ -45,6 +45,7 @@ The service supports these environment variables:
 |---|---|---|
 | `SEARCH_LISTEN_ADDR` | `:8082` | HTTP listen address. |
 | `MODEL_NAME` | `all-MiniLM-L6-v2` | Local SentenceTransformer model. |
+| `SPARSE_MODEL_NAME` | `Qdrant/bm25` | Local FastEmbed sparse lexical model. |
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant endpoint. |
 | `QDRANT_API_KEY` | empty | Optional Qdrant API key. |
 | `QDRANT_COLLECTION_NAME` | `photon_documents_hybrid` | Dense+sparse hybrid vector collection. |

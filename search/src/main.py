@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 from .http import make_handler
 from .metrics import Metrics
 from .qdrant import QdrantRepository
+from .sparse import SparseEncoder
 
 
 class LocalEmbedder:
@@ -25,7 +26,8 @@ def main():
     repository = QdrantRepository(os.getenv("QDRANT_URL", "http://qdrant:6333"), os.getenv("QDRANT_COLLECTION_NAME", "photon_documents_hybrid"), os.getenv("QDRANT_API_KEY", ""))
     metrics = Metrics()
     port = int(os.getenv("SEARCH_PORT", "8082"))
-    server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(LocalEmbedder(model), repository, metrics))
+    sparse_encoder = SparseEncoder(os.getenv("SPARSE_MODEL_NAME", "Qdrant/bm25"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(LocalEmbedder(model), repository, metrics, sparse_encoder=sparse_encoder))
     logging.info("search service listening on %s", port)
     server.serve_forever()
 

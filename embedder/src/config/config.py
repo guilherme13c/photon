@@ -6,6 +6,7 @@ class Config:
         self.kafka_input_topic = os.getenv("KAFKA_INPUT_TOPIC", "cleaned_documents")
         self.kafka_group_id = os.getenv("KAFKA_GROUP_ID", "ray-embedder-workers")
         self.model_name = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
+        self.sparse_model_name = os.getenv("SPARSE_MODEL_NAME", "Qdrant/bm25")
         self.num_workers = int(os.getenv("NUM_WORKERS", "2"))
         self.num_gpus_per_worker = float(os.getenv("NUM_GPUS_PER_WORKER", "0"))
         self.batch_size = int(os.getenv("EMBED_BATCH_SIZE", "32"))

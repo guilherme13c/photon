@@ -3,6 +3,7 @@ sentence-transformers
 torch==2.5.1+cpu
 numpy
 qdrant-client
+fastembed
 pytest
 pytest-mock
 minio
