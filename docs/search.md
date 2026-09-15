@@ -48,6 +48,8 @@ The service supports these environment variables:
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant endpoint. |
 | `QDRANT_API_KEY` | empty | Optional Qdrant API key. |
 | `QDRANT_COLLECTION_NAME` | `photon_documents_hybrid` | Dense+sparse hybrid vector collection. |
+| `QDRANT_DENSE_VECTOR_NAME` | `dense` | Named dense vector in the collection. |
+| `QDRANT_SPARSE_VECTOR_NAME` | `sparse` | Named sparse lexical vector in the collection. |
 | `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
 
 The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`.

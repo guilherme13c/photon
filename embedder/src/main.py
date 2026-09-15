@@ -14,7 +14,9 @@ class EmbedderWorker:
         self.vector_store = VectorStoreRepository(
             url=config.qdrant_url,
             api_key=config.qdrant_api_key,
-            collection_name=config.qdrant_collection_name
+            collection_name=config.qdrant_collection_name,
+            dense_vector_name=config.qdrant_dense_vector_name,
+            sparse_vector_name=config.qdrant_sparse_vector_name,
         )
         self.producer = KafkaProducerRepository(
             broker=config.kafka_broker,

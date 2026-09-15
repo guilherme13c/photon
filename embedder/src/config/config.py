@@ -18,6 +18,8 @@ class Config:
         self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key = os.getenv("QDRANT_API_KEY", "")
         self.qdrant_collection_name = os.getenv("QDRANT_COLLECTION_NAME", "photon_documents_hybrid")
+        self.qdrant_dense_vector_name = os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense")
+        self.qdrant_sparse_vector_name = os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse")
         self.prometheus_port = int(os.getenv("PROMETHEUS_PORT", "8000"))
         
         self.minio_endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
