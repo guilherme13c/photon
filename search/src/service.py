@@ -65,10 +65,14 @@ class SearchService:
         results = [item for item in results if float(item.get("score", 0.0)) >= MIN_SCORE]
         if self.authority_weight:
             for item in results:
-                text_score = float(item["score"])
                 authority = max(0.0, min(float(item.get("authority_score", 0.0)), 1.0))
-                item["score"] = round((1 - self.authority_weight) * text_score + self.authority_weight * authority, 6)
-            results.sort(key=lambda item: item["score"], reverse=True)
+                # Preserve the retrieval score returned to callers. Authority
+                # only provides a bounded secondary ordering signal, so it can
+                # never reduce a textually relevant result below MIN_SCORE.
+                item["_rank_score"] = float(item["score"]) + self.authority_weight * authority
+            results.sort(key=lambda item: item["_rank_score"], reverse=True)
+            for item in results:
+                del item["_rank_score"]
         response = {"results": results, "retrieval": "hybrid_rrf" if self.sparse_encoder else "dense"}
         if len(results) == limit:
             response["next_cursor"] = encode_cursor(query, offset + len(results))

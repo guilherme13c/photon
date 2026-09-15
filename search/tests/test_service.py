@@ -80,4 +80,13 @@ def test_service_uses_authority_to_rerank_textually_relevant_candidates():
 
     response = SearchService(FakeEmbedder(), AuthorityRepository(), authority_weight=0.1).search("photon", 10, "")
     assert [item["id"] for item in response["results"]] == ["authoritative", "text-first"]
-    assert response["results"][0]["score"] == 0.865
+    assert response["results"][0]["score"] == 0.85
+
+
+def test_service_does_not_reduce_a_result_below_the_relevance_floor():
+    class FloorRepository(FakeRepository):
+        def search(self, *_args, **_kwargs):
+            return [{"id": "floor", "score": 0.5, "authority_score": 0.0}]
+
+    response = SearchService(FakeEmbedder(), FloorRepository(), authority_weight=0.08).search("photon", 10, "")
+    assert response["results"] == [{"id": "floor", "score": 0.5, "authority_score": 0.0}]

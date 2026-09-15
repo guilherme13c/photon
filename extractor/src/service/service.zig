@@ -56,9 +56,9 @@ pub const Service = struct {
         _ = self.input_html_bytes_total.fetchAdd(html.len, .monotonic);
         _ = self.cleaned_text_bytes_total.fetchAdd(parsed.main_text.items.len, .monotonic);
         if (parsed.quality_score < 0.8) _ = self.fallback_documents_total.fetchAdd(1, .monotonic);
-        if (parsed.main_text.items.len == 0) {
+        if (!isIndexableText(parsed.main_text.items)) {
             _ = self.documents_rejected_empty_total.fetchAdd(1, .monotonic);
-            std.log.info("Rejected empty document for URL {s}", .{url});
+            std.log.info("Rejected empty or boilerplate document for URL {s}", .{url});
             return;
         }
 
@@ -287,6 +287,21 @@ pub const Service = struct {
     }
 };
 
+/// Keep malformed fragments and tiny navigation strings out of the index while
+/// retaining concise forum and social posts that contain actual prose.
+fn isIndexableText(text: []const u8) bool {
+    if (text.len < 32) return false;
+    var words: usize = 0;
+    var in_word = false;
+    for (text) |ch| {
+        if (std.ascii.isAlphanumeric(ch)) {
+            if (!in_word) words += 1;
+            in_word = true;
+        } else in_word = false;
+    }
+    return words >= 3;
+}
+
 test "Service processes HTML and produces messages" {
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
     var producer = MockKafkaProducer.init();
@@ -302,4 +317,18 @@ test "Service processes HTML and produces messages" {
 
     try std.testing.expectEqual(@as(usize, 1), producer.published_urls);
     try std.testing.expectEqual(@as(usize, 1), producer.published_documents);
+}
+
+test "Service rejects tiny boilerplate documents before indexing" {
+    const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
+    var producer = MockKafkaProducer.init();
+    var svc = Service.init(std.testing.allocator, undefined, producer.interface(), "http://dummy");
+
+    try svc.processHtml("http://test.com", "<html><body><p>tiny words only</p></body></html>", "dummy-key.html", null, null);
+
+    try std.testing.expectEqual(@as(usize, 0), producer.published_documents);
+}
+
+test "isIndexableText retains short but substantive social posts" {
+    try std.testing.expect(isIndexableText("Dogs need daily walks, water, and patient training."));
 }

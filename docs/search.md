@@ -71,8 +71,10 @@ python scripts/recompute_pagerank.py --url http://localhost:6333
 ```
 
 Only links between documents already indexed by Photon are included. Search
-retrieval first filters candidates by textual relevance, then applies the small
-authority weight to break close ties; PageRank never replaces text relevance.
+retrieval first filters candidates by textual relevance; authority is a bounded
+secondary ordering signal and never changes the displayed text relevance score.
+The PageRank job refuses to run until 80% of indexed URLs carry link metadata,
+which prevents stale edge-less documents from receiving synthetic authority.
 Existing documents need to be recrawled before they contain link edges.
 
 The service exposes `GET /healthz`, `GET /readyz`, and `GET /v1/search`.

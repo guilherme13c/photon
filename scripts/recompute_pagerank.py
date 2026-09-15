@@ -34,9 +34,21 @@ def page_rank(graph: dict[str, set[str]], damping: float = 0.85, iterations: int
     return {node: (value - low) / (high - low) for node, value in ranks.items()}
 
 
-def load_graph(client: "QdrantClient", collection: str) -> tuple[dict[str, set[str]], dict[str, list[str]]]:
+def require_link_coverage(indexed_documents: int, documents_with_link_metadata: int, minimum: float) -> float:
+    """Fail closed until a recrawl has supplied enough graph edges."""
+    coverage = documents_with_link_metadata / indexed_documents if indexed_documents else 1.0
+    if coverage < minimum:
+        raise ValueError(
+            f"link metadata coverage is {coverage:.1%}; require at least {minimum:.1%}. "
+            "Recrawl before computing PageRank."
+        )
+    return coverage
+
+
+def load_graph(client: "QdrantClient", collection: str) -> tuple[dict[str, set[str]], dict[str, list[str]], set[str]]:
     graph: dict[str, set[str]] = defaultdict(set)
     point_ids: dict[str, list[str]] = defaultdict(list)
+    metadata_urls: set[str] = set()
     offset = None
     while True:
         points, offset = client.scroll(collection_name=collection, offset=offset, with_payload=["url", "outbound_urls"], limit=256)
@@ -46,6 +58,8 @@ def load_graph(client: "QdrantClient", collection: str) -> tuple[dict[str, set[s
             if isinstance(url, str) and url:
                 graph.setdefault(url, set())
                 point_ids[url].append(str(point.id))
+                if "outbound_urls" in payload:
+                    metadata_urls.add(url)
         if offset is None:
             break
     # A second pass is avoided: Qdrant point payloads were returned above and
@@ -61,7 +75,7 @@ def load_graph(client: "QdrantClient", collection: str) -> tuple[dict[str, set[s
                 graph[source].update(target for target in targets if isinstance(target, str) and target in graph)
         if offset is None:
             break
-    return dict(graph), dict(point_ids)
+    return dict(graph), dict(point_ids), metadata_urls
 
 
 def main() -> None:
@@ -70,13 +84,15 @@ def main() -> None:
     parser.add_argument("--url", default="http://localhost:6333")
     parser.add_argument("--collection", default="photon_documents_hybrid")
     parser.add_argument("--iterations", type=int, default=30)
+    parser.add_argument("--min-link-coverage", type=float, default=0.8)
     args = parser.parse_args()
     client = QdrantClient(url=args.url)
-    graph, point_ids = load_graph(client, args.collection)
+    graph, point_ids, metadata_urls = load_graph(client, args.collection)
+    coverage = require_link_coverage(len(graph), len(metadata_urls), args.min_link_coverage)
     ranks = page_rank(graph, iterations=args.iterations)
     for url, score in ranks.items():
         client.set_payload(args.collection, {"authority_score": score}, points=point_ids[url], wait=True)
-    print(f"updated authority_score for {len(ranks)} documents")
+    print(f"updated authority_score for {len(ranks)} documents (link metadata coverage {coverage:.1%})")
 
 
 if __name__ == "__main__":

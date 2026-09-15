@@ -45,6 +45,7 @@ class QdrantRepository:
                 "title": payload.get("title", ""),
                 "text": payload.get("text", ""),
                 "chunk_index": payload.get("chunk_index", 0),
+                "authority_score": payload.get("authority_score", 0.0),
             })
         return results
 

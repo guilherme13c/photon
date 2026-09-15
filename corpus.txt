@@ -91,3 +91,9 @@ https://www.facebook.com/
 https://www.nationalgeographic.com/
 https://www.imdb.com/
 https://www.w3schools.com/
+
+# Topic coverage: public animal-care references make broad queries such as
+# "dog" meaningful rather than matching incidental mentions in technical pages.
+https://en.wikipedia.org/wiki/Dog
+https://www.akc.org/dog-breeds/
+https://www.aspca.org/pet-care/dog-care
