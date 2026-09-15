@@ -30,8 +30,8 @@ def parse_cleaned_document(data: Any) -> dict[str, Any]:
     for field in ("url", "title", "text", "s3_key"):
         if not isinstance(data.get(field, ""), str):
             raise ValueError(f"{field} must be a string")
-    if not data["url"] or not data["s3_key"]:
-        raise ValueError("url and s3_key must be non-empty strings")
+    if not data.get("url"):
+        raise ValueError("url must be a non-empty string")
 
     if version == 2:
         optional_string_fields = ("canonical_url", "main_text", "content_hash", "language", "content_type")

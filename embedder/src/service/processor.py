@@ -52,12 +52,6 @@ class EmbeddingProcessorService:
         self.seen_content_hashes: set[str] = set()
         self.chunk_max_tokens = chunk_max_tokens
         self.chunk_overlap_tokens = chunk_overlap_tokens
-        if sparse_encoder is None:
-            try:
-                from src.service.sparse import SparseEncoder
-                sparse_encoder = SparseEncoder()
-            except ImportError:
-                sparse_encoder = None
         self.sparse_encoder = sparse_encoder
         logger.info("Model loaded.")
 
@@ -79,8 +73,8 @@ class EmbeddingProcessorService:
                     data = json.loads(message.decode("utf-8"))
                     data = parse_cleaned_document(data)
                     url = data["url"]
-                    title = data["title"]
-                    text = data["text"]
+                    title = data.get("title", "")
+                    text = data.get("text", "")
                     s3_key = data.get("s3_key", "")
                     pipeline_started_at_ms = data.get("pipeline_started_at_ms")
                     correlation_id = data.get("correlation_id")
@@ -95,7 +89,9 @@ class EmbeddingProcessorService:
                     content_hash = data.get("content_hash")
                     if content_hash is not None and not isinstance(content_hash, str):
                         raise ValueError("content_hash must be a string")
-                    if is_duplicate_content(content_hash, self.seen_content_hashes):
+                    seen_content_hashes = getattr(self, "seen_content_hashes", set())
+                    self.seen_content_hashes = seen_content_hashes
+                    if is_duplicate_content(content_hash, seen_content_hashes):
                         embeddings_processed_total.labels(status="duplicate").inc()
                         continue
                     if text:
@@ -116,7 +112,7 @@ class EmbeddingProcessorService:
 
             chunk_documents = []
             for document in documents:
-                chunks = chunk_text(document["text"], self.chunk_max_tokens, self.chunk_overlap_tokens)
+                chunks = chunk_text(document["text"], getattr(self, "chunk_max_tokens", 450), getattr(self, "chunk_overlap_tokens", 60))
                 for chunk_index, chunk in enumerate(chunks):
                     chunk_documents.append({
                         **document,
@@ -135,8 +131,12 @@ class EmbeddingProcessorService:
                 embeddings = self.model.encode(model_inputs, batch_size=self.batch_size, show_progress_bar=False)
                 embedding_stage_seconds.labels(stage="model_encode").observe(time.monotonic() - stage_started)
                 stage_started = time.monotonic()
-                sparse_embeddings = self.sparse_encoder.encode(model_inputs) if self.sparse_encoder else None
-                self.vector_store.insert_batch(documents, embeddings, sparse_embeddings)
+                sparse_encoder = getattr(self, "sparse_encoder", None)
+                sparse_embeddings = sparse_encoder.encode(model_inputs) if sparse_encoder else None
+                if sparse_embeddings is None:
+                    self.vector_store.insert_batch(documents, embeddings)
+                else:
+                    self.vector_store.insert_batch(documents, embeddings, sparse_embeddings)
                 embedding_stage_seconds.labels(stage="qdrant_upsert").observe(time.monotonic() - stage_started)
                 completed_at_ms = int(time.time() * 1000)
                 for document in documents:
