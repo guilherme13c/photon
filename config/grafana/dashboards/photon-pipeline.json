@@ -454,7 +454,7 @@
           "legendFormat": "success/s"
         },
         {
-          "expr": "rate(embedder_messages_processed_total{status=\"process_error\"}[1m])",
+          "expr": "rate(embedder_messages_processed_total{status=\"process_error\"}[1m]) or vector(0)",
           "legendFormat": "errors/s"
         }
       ]
