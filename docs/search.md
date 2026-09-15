@@ -28,11 +28,13 @@ vectors for the default configuration.
       "chunk_index": 0
     }
   ],
-  "next_cursor": "..."
+  "next_cursor": "...",
+  "retrieval": "hybrid_rrf"
 }
 ```
 
-`next_cursor` is omitted when there is no next page. Cursors are bound to the
+`retrieval` identifies the ranking path (`hybrid_rrf` in normal operation,
+`dense` only when sparse retrieval is unavailable). `next_cursor` is omitted when there is no next page. Cursors are bound to the
 normalized query and retrieval configuration; using one with another query or
 retrieval version is invalid. The cursor encodes a fused-result offset for the
 service and must not be interpreted or constructed by a client.

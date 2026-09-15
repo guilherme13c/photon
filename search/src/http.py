@@ -44,7 +44,7 @@ def make_handler(embedder, repository, metrics=None, static_dir=STATIC_DIR, spar
                 limit = int(query.get("limit", ["0"])[0])
                 response = service.search(query.get("q", [""])[0], limit, query.get("cursor", [""])[0])
                 if metrics:
-                    metrics.observe(200, len(response["results"]), time.perf_counter() - started)
+                    metrics.observe(200, len(response["results"]), time.perf_counter() - started, response.get("retrieval", "dense"))
                 self._write(200, response)
             except ValueError as exc:
                 if metrics:

@@ -27,6 +27,7 @@ def test_service_embeds_query_and_searches_repository():
     assert embedder.text == "photon"
     assert repository.args[:3] == ([0.1, 0.2], 10, 0)
     assert response["results"][0]["id"] == "one"
+    assert response["retrieval"] == "dense"
 
 
 def test_service_builds_both_query_representations():
@@ -35,6 +36,7 @@ def test_service_builds_both_query_representations():
     assert response["results"]
     assert repository.args[0] == [0.1, 0.2]
     assert repository.args[3]["sparse_vector"]["indices"] == [1]
+    assert response["retrieval"] == "hybrid_rrf"
 
 
 def test_validate_request_defaults_and_rejects_bad_input():

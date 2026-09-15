@@ -59,7 +59,7 @@ class SearchService:
             results = self.repository.search(dense_vector, limit, offset, sparse_vector=sparse_vector)
         else:
             results = self.repository.search(dense_vector, limit, offset)
-        response = {"results": results}
+        response = {"results": results, "retrieval": "hybrid_rrf" if self.sparse_encoder else "dense"}
         if len(results) == limit:
             response["next_cursor"] = encode_cursor(query, offset + len(results))
         return response
