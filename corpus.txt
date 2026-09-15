@@ -122,3 +122,26 @@ https://mastodon.social/explore
 https://bsky.app/
 https://x.com/explore
 https://www.facebook.com/public
+
+# News hubs across regions and editorial styles. Homepages and section indexes
+# expose fresh articles plus broad outbound links without relying on one outlet.
+https://apnews.com/
+https://www.aljazeera.com/
+https://www.france24.com/en/
+https://www.dw.com/en/
+https://www.euronews.com/
+https://www.cbc.ca/news
+https://abcnews.go.com/
+https://www.pbs.org/newshour/
+https://www.cnn.com/
+https://www.cbsnews.com/
+https://www.nbcnews.com/
+https://www.axios.com/
+https://www.theverge.com/
+https://arstechnica.com/
+https://www.scientificamerican.com/
+https://theconversation.com/
+https://www.japantimes.co.jp/
+https://www.thehindu.com/
+https://www.lemonde.fr/en/
+https://www.spiegel.de/international/
