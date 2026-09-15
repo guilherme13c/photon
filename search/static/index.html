@@ -4,37 +4,31 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Search Photon’s indexed documents with semantic search.">
-    <title>Photon Search</title>
+    <title>Photon</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <main class="shell">
-      <header class="masthead">
-        <div class="eyebrow"><span class="signal"></span> Photon / semantic index</div>
-        <h1>Find the signal<br><em>in your corpus.</em></h1>
-        <p class="intro">Ask a question in plain language. Photon finds the most relevant passages from your indexed pages.</p>
-      </header>
-
-      <section class="search-panel" aria-labelledby="search-heading">
-        <h2 id="search-heading">Search documents</h2>
+      <header class="masthead"><div class="logo">photon</div><p>Search the web you’ve indexed.</p></header>
+      <section class="search-panel" aria-label="Search">
         <form id="search-form" class="search-form">
           <label class="sr-only" for="query">Search query</label>
-          <input id="query" name="q" type="search" maxlength="4096" placeholder="What do you want to learn?" autocomplete="off" required>
-          <label class="limit-label" for="limit">Results
+          <input id="query" name="q" type="search" maxlength="4096" placeholder="Search" autocomplete="off" required>
+          <label class="limit-label" for="limit">Show
             <select id="limit" name="limit" aria-label="Results per page">
               <option value="10" selected>10</option>
               <option value="20">20</option>
               <option value="50">50</option>
             </select>
           </label>
-          <button type="submit">Search <span aria-hidden="true">↗</span></button>
+          <button type="submit">Search</button>
         </form>
         <p id="status" class="status" role="status" aria-live="polite">Ready when you are.</p>
       </section>
 
       <section id="results" class="results" aria-label="Search results"></section>
       <div class="pagination"><button id="load-more" class="secondary" type="button" hidden>Load more results</button></div>
-      <footer><span>Dense + lexical · Qdrant RRF</span><a href="/metrics">Service metrics ↗</a></footer>
+      <footer><span>Powered by Photon</span><a href="/metrics">Metrics</a></footer>
     </main>
     <script src="/app.js" defer></script>
   </body>
