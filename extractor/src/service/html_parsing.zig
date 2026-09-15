@@ -155,6 +155,7 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
     var saw_main = false;
     var title_start: ?usize = null;
     var heading_start: ?usize = null;
+    var loc_start: ?usize = null;
     var i: usize = 0;
     while (i < html.len) {
         if (std.mem.startsWith(u8, html[i..], "<!--")) {
@@ -195,6 +196,13 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
                 }
                 title_start = null;
             }
+            if (eq(name, "loc")) {
+                if (loc_start) |start| {
+                    const value = std.mem.trim(u8, html[start..i], " \t\r\n");
+                    if (value.len > 0) try result.links.append(allocator, try allocator.dupe(u8, value));
+                }
+                loc_start = null;
+            }
             if (isHeading(name)) { if (heading_start) |start| try result.headings.append(allocator, std.mem.trim(u8, html[start..i], " \t\r\n")); heading_start = null; }
             if (isBlock(name) and ignored == 0 and hidden == 0) {
                 try blockBreak(&result.text, allocator);
@@ -208,6 +216,7 @@ pub fn parseHtml(allocator: std.mem.Allocator, html: []const u8) !ParsedHtml {
                 if (attributeValue(attrs, "href")) |href| result.canonical_url = href;
             }
             if (eq(name, "title")) title_start = end + 1;
+            if (eq(name, "loc")) loc_start = end + 1;
             if (isHeading(name)) heading_start = end + 1;
             if (eq(name, "a")) if (attributeValue(attrs, "href")) |href| try result.links.append(allocator, href);
             if (ignored_tag) ignored += 1;
