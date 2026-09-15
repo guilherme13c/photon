@@ -99,3 +99,8 @@ Compose override used by the runner. Keep each override's CPU/memory limits and
 image digests pinned, because Docker `deploy.resources` and host scheduling can
 otherwise make comparisons meaningless. Results establish baselines first;
 only after stable history exists should a scheduled comparison become a gate.
+
+For embedder tuning, repeat the same run with `PHOTON_EMBED_BATCH_SIZE=32` and
+`PHOTON_EMBED_BATCH_SIZE=64`, keeping the corpus, query set, replica count, and
+thread settings fixed. Compare retrieval quality (recall@k/MRR), p50/p95
+latency, successful throughput, CPU, and memory from the generated reports.
