@@ -62,6 +62,8 @@ All Prometheus ports for custom services are configurable via environment variab
 | `EMBEDDER_PROMETHEUS_PORT` | `8000` | Embedder |
 | `PHOTON_EMBED_BATCH_SIZE` | `32` | Embedder records per inference/Qdrant batch |
 | `PHOTON_EMBED_BATCH_WAIT_MS` | `25` | Maximum batch collection wait |
+| `PHOTON_EMBED_OMP_THREADS` | `2` | CPU threads per embedder process |
+| `PHOTON_TOKENIZERS_PARALLELISM` | `false` | Prevent tokenizer thread oversubscription |
 | `PHOTON_EMBED_MAX_TEXT_CHARS` | `8192` | Input bound before tokenization |
 | `PHOTON_CLEANUP_BATCH_WAIT_MS` | `100` | Cleanup-worker batch collection wait |
 | `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor |
