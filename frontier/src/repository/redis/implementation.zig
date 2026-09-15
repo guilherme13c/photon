@@ -114,8 +114,10 @@ pub const Redis = struct {
             \\redis.call('SET', KEYS[1], ARGV[3])
             \\redis.call('SET', KEYS[2], next_allowed)
             \\redis.call('ZADD', KEYS[3], next_allowed, ARGV[5])
-            \\redis.call('ZADD', KEYS[4], next_allowed, ARGV[4])
             \\local queue_depth = redis.call('ZCARD', KEYS[3])
+            \\-- Retain every URL, but let deep host queues yield dispatch turns.
+            \\local fairness_penalty = math.min(queue_depth, 100) * 50
+            \\redis.call('ZADD', KEYS[4], next_allowed + fairness_penalty, ARGV[4])
             \\redis.call('ZADD', KEYS[6], queue_depth, ARGV[4])
             \\redis.call('HSET', KEYS[5], 'next_allowed_at_ms', next_allowed, 'crawl_delay_ms', ARGV[2], 'queue_depth', queue_depth, 'last_scheduled_at_ms', ARGV[1])
             \\redis.call('HINCRBY', KEYS[5], 'scheduled_total', 1)

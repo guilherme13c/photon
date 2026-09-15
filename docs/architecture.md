@@ -179,6 +179,8 @@ Useful incident checks are:
 - Kafka consumer lag versus Fetcher/Extractor/Embedder throughput;
 - Dispatcher shard scans rotate each polling pass so fixed shard ordering cannot
   starve hosts whose queues hash to later shards;
+- Host queues retain every discovered URL, while a bounded queue-depth penalty
+  makes heavily backlogged hosts yield dispatch opportunities to other hosts.
 - Fetcher end-to-end and per-stage (`origin_fetch`, `object_store_save`, and
   `produce_fetched_page`) latency histograms;
 - DLQ growth and the associated failure reason;
