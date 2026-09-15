@@ -6,6 +6,7 @@ import json
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
 RETRIEVAL_VERSION = "hybrid-rrf-v2"
+MIN_SCORE = 0.5
 
 
 def validate_request(query, limit, cursor):
@@ -60,6 +61,7 @@ class SearchService:
             results = self.repository.search(dense_vector, limit, offset, sparse_vector=sparse_vector)
         else:
             results = self.repository.search(dense_vector, limit, offset)
+        results = [item for item in results if float(item.get("score", 0.0)) >= MIN_SCORE]
         response = {"results": results, "retrieval": "hybrid_rrf" if self.sparse_encoder else "dense"}
         if len(results) == limit:
             response["next_cursor"] = encode_cursor(query, offset + len(results))

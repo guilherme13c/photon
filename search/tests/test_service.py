@@ -14,6 +14,10 @@ class FakeRepository:
         self.args = vector, limit, offset, kwargs
         return [{"id": "one", "score": 0.9, "text": "result", "chunk_index": 0}]
 
+class MixedRepository(FakeRepository):
+    def search(self, vector, limit, offset, **kwargs):
+        return [{"id": "high", "score": 0.5}, {"id": "low", "score": 0.49}]
+
 
 class FakeSparseEncoder:
     def encode(self, texts):
@@ -60,3 +64,7 @@ def test_validate_request_defaults_and_rejects_bad_input():
             pass
         else:
             raise AssertionError("invalid request accepted")
+
+def test_service_filters_results_below_minimum_score():
+    response = SearchService(FakeEmbedder(), MixedRepository()).search("photon", 10, "")
+    assert [item["id"] for item in response["results"]] == ["high"]
