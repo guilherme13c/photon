@@ -23,7 +23,15 @@ func NewClient(frontierURL ...string) Client {
 	return &clientImpl{
 		frontierURL: permitURL,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 15 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:          100,
+				MaxIdleConnsPerHost:   16,
+				IdleConnTimeout:       30 * time.Second,
+				TLSHandshakeTimeout:   5 * time.Second,
+				ResponseHeaderTimeout: 10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
 			// A redirect is another origin request. Never make it implicitly.
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 				return http.ErrUseLastResponse
