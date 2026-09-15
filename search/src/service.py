@@ -5,7 +5,7 @@ import json
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
-RETRIEVAL_VERSION = "hybrid-rrf-v1"
+RETRIEVAL_VERSION = "hybrid-rrf-v2"
 
 
 def validate_request(query, limit, cursor):
@@ -52,11 +52,11 @@ class SearchService:
         self.sparse_encoder = sparse_encoder
 
     def search(self, query, limit, cursor):
-        query, limit, cursor = validate_request(remove_stop_words(query), limit, cursor)
+        query, limit, cursor = validate_request(query, limit, cursor)
         offset = decode_cursor(query, cursor)
         dense_vector = self.embedder.embed(query)
         if self.sparse_encoder:
-            sparse_vector = self.sparse_encoder.encode([query])[0]
+            sparse_vector = self.sparse_encoder.encode([remove_stop_words(query)])[0]
             results = self.repository.search(dense_vector, limit, offset, sparse_vector=sparse_vector)
         else:
             results = self.repository.search(dense_vector, limit, offset)

@@ -124,16 +124,17 @@ class EmbeddingProcessorService:
             documents = chunk_documents
 
             if documents:
-                model_inputs = [
-                    remove_stop_words(f"{doc['title']}\n{doc['text']}" if doc["title"] else doc["text"])[0:self.max_text_chars]
+                dense_inputs = [
+                    (f"{doc['title']}\n{doc['text']}" if doc["title"] else doc["text"])[0:self.max_text_chars]
                     for doc in documents
                 ]
+                sparse_inputs = [remove_stop_words(text) for text in dense_inputs]
                 stage_started = time.monotonic()
-                embeddings = self.model.encode(model_inputs, batch_size=self.batch_size, show_progress_bar=False)
+                embeddings = self.model.encode(dense_inputs, batch_size=self.batch_size, show_progress_bar=False)
                 embedding_stage_seconds.labels(stage="model_encode").observe(time.monotonic() - stage_started)
                 stage_started = time.monotonic()
                 sparse_encoder = getattr(self, "sparse_encoder", None)
-                sparse_embeddings = sparse_encoder.encode(model_inputs) if sparse_encoder else None
+                sparse_embeddings = sparse_encoder.encode(sparse_inputs) if sparse_encoder else None
                 if sparse_embeddings is None:
                     self.vector_store.insert_batch(documents, embeddings)
                 else:

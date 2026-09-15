@@ -34,7 +34,7 @@ def test_process_message_valid_json(mocker, mock_vector_store, mock_object_store
     processor.process_message(message)
 
     mock_model_instance.encode.assert_called_once_with(
-            ["example example document"], batch_size=32, show_progress_bar=False
+            ["Example\nThis is an example document."], batch_size=32, show_progress_bar=False
     )
     mock_vector_store.insert_batch.assert_called_once()
     assert mock_vector_store.insert_batch.call_args.args[0][0]["chunk_index"] == 0

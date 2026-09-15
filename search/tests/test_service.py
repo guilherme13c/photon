@@ -20,6 +20,11 @@ class FakeSparseEncoder:
         assert texts == ["photon"]
         return [{"indices": [1], "values": [1.0]}]
 
+class RecordingSparseEncoder:
+    def encode(self, texts):
+        self.texts = texts
+        return [{"indices": [1], "values": [1.0]}]
+
 
 def test_service_embeds_query_and_searches_repository():
     embedder, repository = FakeEmbedder(), FakeRepository()
@@ -37,6 +42,13 @@ def test_service_builds_both_query_representations():
     assert repository.args[0] == [0.1, 0.2]
     assert repository.args[3]["sparse_vector"]["indices"] == [1]
     assert response["retrieval"] == "hybrid_rrf"
+
+def test_dense_keeps_original_query_while_sparse_removes_stop_words():
+    embedder, repository = FakeEmbedder(), FakeRepository()
+    sparse = RecordingSparseEncoder()
+    SearchService(embedder, repository, sparse_encoder=sparse).search("The photon system", 10, "")
+    assert embedder.text == "The photon system"
+    assert sparse.texts == ["photon system"]
 
 
 def test_validate_request_defaults_and_rejects_bad_input():

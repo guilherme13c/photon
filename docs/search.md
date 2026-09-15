@@ -1,7 +1,9 @@
 # Search API contract
 
 The Python search service exposes hybrid dense + lexical search over named vectors in Qdrant.
-Common English stop words are removed from both documents and queries before encoding
+Dense embeddings use the original title/text and query. Common English stop words are
+removed only for the sparse lexical representation, preserving semantic context for
+dense retrieval. Cursor hashes use the original normalized query and retrieval version.
 using the same deterministic normalizer.
 
 Queries use the local `all-MiniLM-L6-v2` SentenceTransformer model. The model
