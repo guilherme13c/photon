@@ -97,3 +97,28 @@ https://www.w3schools.com/
 https://en.wikipedia.org/wiki/Dog
 https://www.akc.org/dog-breeds/
 https://www.aspca.org/pet-care/dog-care
+
+# High-link-diversity hubs. These pages are intentionally broad entry points:
+# they expose many distinct public domains and subject areas to the crawler.
+https://en.wikipedia.org/wiki/Main_Page
+https://en.wikipedia.org/wiki/Portal:Current_events
+https://www.wikidata.org/wiki/Wikidata:Main_Page
+https://commons.wikimedia.org/wiki/Main_Page
+https://news.ycombinator.com/newest
+https://news.ycombinator.com/ask
+https://stackoverflow.com/questions
+https://superuser.com/questions
+https://serverfault.com/questions
+https://github.com/explore
+https://github.com/trending
+https://www.reddit.com/r/all/
+https://www.reddit.com/r/AskReddit/
+https://www.reddit.com/r/todayilearned/
+https://www.reddit.com/r/explainlikeimfive/
+https://www.reddit.com/r/news/
+https://www.reddit.com/r/science/
+https://www.reddit.com/r/books/
+https://mastodon.social/explore
+https://bsky.app/
+https://x.com/explore
+https://www.facebook.com/public
