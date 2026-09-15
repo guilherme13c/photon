@@ -6,6 +6,7 @@ const KafkaProducer = @import("repository/kafka/producer/implementation.zig").Ka
 const Service = @import("service/service.zig").Service;
 const Dispatcher = @import("service/dispatcher.zig").Dispatcher;
 const RestServer = @import("transport/rest/server.zig").RestServer;
+const _sitemap_tests = @import("service/sitemap.zig");
 
 // global atomic flag for signal handling
 var keep_running = std.atomic.Value(bool).init(true);

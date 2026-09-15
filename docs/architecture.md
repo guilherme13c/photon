@@ -63,6 +63,8 @@ the scheduler’s point of view:
 2. Fetch/evaluate `robots.txt` using the target scheme and the crawler user
    agent. A successful policy is cached for 24 hours; fetch failures are
    negative-cached for five minutes and use the conservative default delay.
+   Sitemap XML parsing is bounded and supports both URL sets and sitemap
+   indexes; robots declarations will feed this same admission path.
 3. Select the most-specific matching `User-agent` group. The parser supports
    `Allow`, `Disallow`, `Crawl-delay`, `*`, end anchors, inline comments, and
    longest-match precedence with `Allow` winning ties.
