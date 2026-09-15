@@ -181,6 +181,8 @@ Useful incident checks are:
   starve hosts whose queues hash to later shards;
 - Host queues retain every discovered URL, while a bounded queue-depth penalty
   makes heavily backlogged hosts yield dispatch opportunities to other hosts.
+- Frontier Kafka consumers accept additive candidate envelopes (`url`, `depth`,
+  and `source_host`) while retaining compatibility with raw URL payloads.
 - Fetcher end-to-end and per-stage (`origin_fetch`, `object_store_save`, and
   `produce_fetched_page`) latency histograms;
 - DLQ growth and the associated failure reason;

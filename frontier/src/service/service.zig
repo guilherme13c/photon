@@ -240,7 +240,18 @@ pub const Service = struct {
     fn kafkaHandler(ctx: *anyopaque, message: []const u8) anyerror!void {
         const self: *Service = @ptrCast(@alignCast(ctx));
         // A consumer offset is handled only after Redis admission completes.
-        try self.processUrl(message);
+        // Accept both the legacy raw-URL payload and the provenance envelope.
+        // Depth/source metadata is additive and can be used by future priority
+        // policies without making existing producers upgrade atomically.
+        var arena = std.heap.ArenaAllocator.init(self.allocator);
+        defer arena.deinit();
+        const Candidate = struct { url: []const u8 };
+        if (std.json.parseFromSlice(Candidate, arena.allocator(), message, .{ .ignore_unknown_fields = true })) |parsed| {
+            defer parsed.deinit();
+            try self.processUrl(parsed.value.url);
+        } else |_| {
+            try self.processUrl(message);
+        }
     }
 
     pub fn startConsuming(self: *Service, consumer: _KafkaConsumer) !void {
