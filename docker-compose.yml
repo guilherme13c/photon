@@ -40,6 +40,10 @@ services:
     command: ["--kafka.server=kafka:29092"]
     depends_on:
       - kafka
+    # Kafka may accept connections only after broker startup completes. The
+    # exporter exits when its initial connection fails, so keep retrying until
+    # the broker is ready and recover from transient broker restarts.
+    restart: unless-stopped
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1

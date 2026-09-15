@@ -39,6 +39,10 @@ Prometheus is configured with 9 scrape targets covering the full pipeline:
 | Service | Exporter | Port | Key Metrics |
 |---------|----------|------|-------------|
 | Kafka | `danielqsj/kafka-exporter` | 9308 | `kafka_consumergroup_lag`, `kafka_topic_partition_current_offset` |
+
+The Kafka exporter is configured with `restart: unless-stopped` because Kafka can
+take longer to become ready than the exporter during a cold Compose start. If
+the exporter was previously stopped, run `docker compose up -d kafka-exporter`.
 | Redis | `oliver006/redis_exporter` | 9121 | `redis_memory_used_bytes`, `redis_connected_clients` |
 | MinIO | Native | 9000 | Cluster metrics via `/minio/v2/metrics/cluster` |
 | Qdrant | Native | 6333 | `app_info_collections_total`, `app_info_collections_vector_total` |

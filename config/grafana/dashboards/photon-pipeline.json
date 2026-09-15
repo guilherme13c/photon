@@ -630,8 +630,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
-          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+          "expr": "histogram_quantile(0.50, sum by (le, job, instance) (rate(frontier_admission_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.50, sum by (le, job, instance) (rate(fetcher_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.50, sum by (le, job, instance) (rate(renderer_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.50, sum by (le, job, instance) (rate(extractor_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.50, sum by (le, job, instance) (rate(embedder_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.50, sum by (le, job, instance) (rate(photon_end_to_end_duration_seconds_bucket[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ],
       "fieldConfig": {
@@ -784,8 +784,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 82 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.75, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
-          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+          "expr": "histogram_quantile(0.75, sum by (le, job, instance) (rate(frontier_admission_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.75, sum by (le, job, instance) (rate(fetcher_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.75, sum by (le, job, instance) (rate(renderer_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.75, sum by (le, job, instance) (rate(extractor_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.75, sum by (le, job, instance) (rate(embedder_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.75, sum by (le, job, instance) (rate(photon_end_to_end_duration_seconds_bucket[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "ms" } }
@@ -797,8 +797,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 82 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.90, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
-          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+          "expr": "histogram_quantile(0.90, sum by (le, job, instance) (rate(frontier_admission_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.90, sum by (le, job, instance) (rate(fetcher_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.90, sum by (le, job, instance) (rate(renderer_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.90, sum by (le, job, instance) (rate(extractor_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.90, sum by (le, job, instance) (rate(embedder_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.90, sum by (le, job, instance) (rate(photon_end_to_end_duration_seconds_bucket[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "ms" } }
@@ -810,8 +810,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 90 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
-          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+          "expr": "histogram_quantile(0.95, sum by (le, job, instance) (rate(frontier_admission_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.95, sum by (le, job, instance) (rate(fetcher_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.95, sum by (le, job, instance) (rate(renderer_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.95, sum by (le, job, instance) (rate(extractor_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.95, sum by (le, job, instance) (rate(embedder_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.95, sum by (le, job, instance) (rate(photon_end_to_end_duration_seconds_bucket[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "ms" } }
@@ -823,8 +823,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 90 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le, job, instance, __name__) (rate({__name__=~\"frontier_admission_duration_seconds_bucket|fetcher_process_duration_seconds_bucket|renderer_process_duration_seconds_bucket|extractor_process_duration_seconds_bucket|embedder_process_duration_seconds_bucket|photon_end_to_end_duration_seconds_bucket\"}[5m]))) * 1000",
-          "legendFormat": "{{job}} {{instance}} · {{__name__}}"
+          "expr": "histogram_quantile(0.99, sum by (le, job, instance) (rate(frontier_admission_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.99, sum by (le, job, instance) (rate(fetcher_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.99, sum by (le, job, instance) (rate(renderer_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.99, sum by (le, job, instance) (rate(extractor_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.99, sum by (le, job, instance) (rate(embedder_process_duration_seconds_bucket[5m]))) * 1000 or histogram_quantile(0.99, sum by (le, job, instance) (rate(photon_end_to_end_duration_seconds_bucket[5m]))) * 1000",
+          "legendFormat": "{{job}} {{instance}}"
         }
       ],
       "fieldConfig": { "defaults": { "unit": "ms" } }
