@@ -20,7 +20,7 @@ function renderResult(result, index) {
   article.style.animationDelay = `${Math.min(index, 8) * 35}ms`;
   const meta = document.createElement("div");
   meta.className = "result-meta";
-  meta.innerHTML = `<span>CHUNK ${Number(result.chunk_index ?? 0) + 1}</span><span class="score">${(Number(result.score || 0) * 100).toFixed(1)}% match</span>`;
+  meta.innerHTML = `<span>CHUNK ${Number(result.chunk_index ?? 0) + 1}</span><span class="score">Hybrid relevance ${(Number(result.score || 0)).toFixed(3)}</span>`;
   const heading = document.createElement("h3");
   const title = text(result.title, text(result.url, "Untitled document"));
   if (result.url) {

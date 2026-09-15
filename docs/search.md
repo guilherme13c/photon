@@ -33,9 +33,9 @@ vectors for the default configuration.
 ```
 
 `next_cursor` is omitted when there is no next page. Cursors are bound to the
-normalized query; using one with another query is invalid. The cursor encodes
-an offset for the service and must not be interpreted or constructed by a
-client.
+normalized query and retrieval configuration; using one with another query or
+retrieval version is invalid. The cursor encodes a fused-result offset for the
+service and must not be interpreted or constructed by a client.
 
 ## Service configuration
 

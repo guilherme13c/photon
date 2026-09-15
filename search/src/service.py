@@ -4,6 +4,7 @@ import json
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
+RETRIEVAL_VERSION = "hybrid-rrf-v1"
 
 
 def validate_request(query, limit, cursor):
@@ -26,7 +27,7 @@ def _query_hash(query):
 def encode_cursor(query, offset):
     if offset < 0:
         raise ValueError("invalid cursor")
-    payload = json.dumps({"q": _query_hash(query), "o": offset}, separators=(",", ":")).encode()
+    payload = json.dumps({"v": RETRIEVAL_VERSION, "q": _query_hash(query), "o": offset}, separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
@@ -36,7 +37,7 @@ def decode_cursor(query, value):
     try:
         padded = value + "=" * (-len(value) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded).decode())
-        if payload["q"] != _query_hash(query) or payload["o"] < 0:
+        if payload.get("v") != RETRIEVAL_VERSION or payload["q"] != _query_hash(query) or payload["o"] < 0:
             raise ValueError
         return payload["o"]
     except (ValueError, KeyError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
