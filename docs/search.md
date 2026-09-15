@@ -77,3 +77,21 @@ is required.
 histogram. Metrics intentionally have no query, URL, cursor, or other
 user-controlled labels. The histogram is suitable for Prometheus p50/p75/p90/
 p95/p99 calculations with `histogram_quantile`.
+# Relevance labeling
+
+Generate a reviewable candidate pool from the live API before computing recall,
+MRR, or nDCG:
+
+```bash
+python scripts/generate_label_pool.py \
+  --url http://localhost:8080 \
+  --queries tests/performance/search-queries.v1.json \
+  --limit 30 --output /tmp/search-label-pool.json
+```
+
+Assign `relevance` (0–3) and optional `uncertain` flags in the output, then
+convert reviewed candidates to the evaluator's `relevant_ids` qrels format.
+Keep the pool, query fixture, corpus snapshot, and labeling model/prompt
+version together so metrics remain reproducible. Automatic model judgments are
+weak labels and should be spot-checked by a human before being used as a
+baseline.
