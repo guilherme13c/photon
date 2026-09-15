@@ -9,6 +9,10 @@ class QdrantRepository:
     def search(self, vector, limit, offset, sparse_vector=None, candidate_limit=None):
         if sparse_vector is None:
             return self._search_dense(vector, limit, offset)
+        if not isinstance(sparse_vector, models.SparseVector):
+            sparse_vector = models.SparseVector(
+                indices=list(sparse_vector.indices), values=list(sparse_vector.values)
+            )
         candidate_limit = candidate_limit or max(50, limit * 5)
         response = self.client.query_points(
             collection_name=self.collection,
