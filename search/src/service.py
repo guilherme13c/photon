@@ -1,5 +1,6 @@
 import base64
 import hashlib
+from .stopwords import remove_stop_words
 import json
 
 DEFAULT_LIMIT = 10
@@ -51,7 +52,7 @@ class SearchService:
         self.sparse_encoder = sparse_encoder
 
     def search(self, query, limit, cursor):
-        query, limit, cursor = validate_request(query, limit, cursor)
+        query, limit, cursor = validate_request(remove_stop_words(query), limit, cursor)
         offset = decode_cursor(query, cursor)
         dense_vector = self.embedder.embed(query)
         if self.sparse_encoder:

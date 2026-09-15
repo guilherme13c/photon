@@ -4,6 +4,7 @@ import time
 
 from prometheus_client import Counter, Gauge, Histogram
 from sentence_transformers import SentenceTransformer
+from .stopwords import remove_stop_words
 from src.repository.vector_store import VectorStoreRepository
 from src.service.contracts import is_duplicate_content, parse_cleaned_document
 from src.service.chunking import chunk_text
@@ -124,7 +125,7 @@ class EmbeddingProcessorService:
 
             if documents:
                 model_inputs = [
-                    (f"{doc['title']}\n{doc['text']}" if doc["title"] else doc["text"])[0:self.max_text_chars]
+                    remove_stop_words(f"{doc['title']}\n{doc['text']}" if doc["title"] else doc["text"])[0:self.max_text_chars]
                     for doc in documents
                 ]
                 stage_started = time.monotonic()
