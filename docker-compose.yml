@@ -218,6 +218,7 @@ services:
       KAFKA_DLQ_TOPIC: ${EXTRACTOR_KAFKA_DLQ_TOPIC:-extractor-dlq}
       PROMETHEUS_PORT: ${EXTRACTOR_PROMETHEUS_PORT:-8001}
     deploy:
+      replicas: ${PHOTON_EXTRACTOR_REPLICAS:-2}
       resources:
         limits:
           cpus: '0.5'
@@ -251,6 +252,7 @@ services:
       EMBED_MAX_TEXT_CHARS: ${PHOTON_EMBED_MAX_TEXT_CHARS:-8192}
       PROMETHEUS_PORT: ${EMBEDDER_PROMETHEUS_PORT:-8000}
     deploy:
+      replicas: ${PHOTON_EMBEDDER_REPLICAS:-2}
       resources:
         limits:
           cpus: '1.0'
@@ -362,6 +364,7 @@ services:
       PHOTON_ENABLE_PPROF: ${PHOTON_ENABLE_PPROF:-0}
       PHOTON_PPROF_PORT: "6060"
     deploy:
+      replicas: ${PHOTON_FETCHER_REPLICAS:-3}
       resources:
         limits:
           cpus: '0.5'
