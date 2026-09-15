@@ -117,12 +117,15 @@ pub const KafkaProducer = struct {
         const self: *KafkaProducer = @ptrCast(@alignCast(ctx));
         const key = hostKey(url);
 
+        var envelope: [4096]u8 = undefined;
+        const payload = try buildCandidateEnvelope(url, 1, key, &envelope);
+
         const res = c.rd_kafka_produce(
             self.discovered_urls_topic,
             c.RD_KAFKA_PARTITION_UA,
             c.RD_KAFKA_MSG_F_COPY,
-            @ptrCast(@constCast(url.ptr)),
-            url.len,
+            @ptrCast(@constCast(payload.ptr)),
+            payload.len,
             @ptrCast(@constCast(key.ptr)),
             key.len,
             null,
@@ -142,6 +145,15 @@ pub const KafkaProducer = struct {
         const authority = url[scheme_end + 3 ..];
         const path_start = std.mem.indexOfScalar(u8, authority, '/') orelse authority.len;
         return authority[0..path_start];
+    }
+
+    /// Builds the versioned discovery contract while retaining the URL as the
+    /// Kafka partition key. URLs are normalized before reaching this boundary;
+    /// reject characters that would make the compact JSON envelope ambiguous.
+    pub fn buildCandidateEnvelope(url: []const u8, depth: u32, source_host: []const u8, buffer: []u8) ![]const u8 {
+        for (url) |ch| if (ch == '"' or ch == '\\' or ch < 0x20) return error.InvalidEnvelopeValue;
+        for (source_host) |ch| if (ch == '"' or ch == '\\' or ch < 0x20) return error.InvalidEnvelopeValue;
+        return std.fmt.bufPrint(buffer, "{{\"url\":\"{s}\",\"depth\":{},\"source_host\":\"{s}\"}}", .{ url, depth, source_host });
     }
 
     fn publishCleanedDocument(ctx: *anyopaque, url: []const u8, document_json: []const u8) anyerror!void {
@@ -190,3 +202,9 @@ pub const KafkaProducer = struct {
         _ = c.rd_kafka_poll(self.rk, 0);
     }
 };
+
+test "candidate envelope carries crawl provenance" {
+    var buffer: [256]u8 = undefined;
+    const payload = try KafkaProducer.buildCandidateEnvelope("https://example.com/a", 2, "example.com", &buffer);
+    try std.testing.expectEqualStrings("{\"url\":\"https://example.com/a\",\"depth\":2,\"source_host\":\"example.com\"}", payload);
+}
