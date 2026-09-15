@@ -11,6 +11,10 @@ class Config:
         self.num_gpus_per_worker = float(os.getenv("NUM_GPUS_PER_WORKER", "0"))
         self.batch_size = int(os.getenv("EMBED_BATCH_SIZE", "32"))
         self.batch_wait_ms = int(os.getenv("EMBED_BATCH_WAIT_MS", "25"))
+        if self.batch_size < 1:
+            raise ValueError("EMBED_BATCH_SIZE must be at least 1")
+        if self.batch_wait_ms < 0:
+            raise ValueError("EMBED_BATCH_WAIT_MS must not be negative")
         # This is a safety bound for tokenizer CPU and memory. SentenceTransformer
         # applies its own token bound afterwards.
         self.max_text_chars = int(os.getenv("EMBED_MAX_TEXT_CHARS", "8192"))
