@@ -60,7 +60,7 @@ The machine learning pipeline responsible for generating vector embeddings.
 - **Apache Kafka & Zookeeper:** The central event bus connecting all components (`urls`, `fetched-pages`, `cleaned_documents`), with Dead Letter Queues (DLQ) for fault tolerance.
 - **MinIO:** S3-compatible object storage for efficiently storing large raw HTML payloads.
 - **Redis:** Used by the Frontier for state management and deduplication.
-- **Qdrant:** Destination vector database for semantic search.
+- **Qdrant:** Destination vector database for dense + lexical hybrid search.
 
 ### 8. Observability
 - **Prometheus:** Collects metrics from all services and infrastructure components, including Search.

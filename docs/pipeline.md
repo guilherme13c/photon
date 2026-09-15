@@ -138,7 +138,7 @@ The **Photon Pipeline** dashboard is auto-provisioned and includes:
 - **Apache Kafka:** The primary message bus passing data between all stages (`urls`, `dynamic-urls`, `fetched-pages`, `cleaned_documents`), with Dead Letter Queues (DLQ) for error handling.
 - **MinIO:** Object storage for temporarily holding large HTML payloads, reducing Kafka message sizes. Metrics enabled via `MINIO_PROMETHEUS_AUTH_TYPE=public`.
 - **Redis:** State store for the Frontier to manage URL deduplication and politeness delays.
-- **Qdrant:** Destination vector database with native Prometheus metrics.
+- **Qdrant:** Destination dense+sparse vector database with native Prometheus metrics.
 - **Kafka Exporter:** Sidecar container (`danielqsj/kafka-exporter`) exposing Kafka broker and consumer group metrics.
 - **Redis Exporter:** Sidecar container (`oliver006/redis_exporter`) exposing Redis server metrics.
 

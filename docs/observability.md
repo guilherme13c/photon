@@ -32,6 +32,7 @@ Prometheus is configured with 9 scrape targets covering the full pipeline:
 | Renderer | Go | 3000 | `/metrics` | `renderer_pages_rendered_total{status}`, `renderer_process_duration_seconds`, `renderer_in_flight` |
 | Extractor | Zig | 8001 | `/metrics` | `html_processed_total`, `urls_extracted_total`, `documents_produced_total`, `documents_rejected_empty_total`, `fallback_documents_total`, `input_html_bytes_total`, `cleaned_text_bytes_total`, `extractor_process_duration_seconds` |
 | Embedder | Python | 8000 | `/metrics` | `embedder_messages_processed_total{status}`, `embedder_batches_processed_total{status}`, `embedder_process_duration_seconds`, `embedder_stage_duration_seconds{stage}`, `embedder_in_flight` |
+| Search | Python | 8082 | `/metrics` | `photon_search_requests_total`, `photon_search_results_total`, `photon_search_retrieval_requests_total{mode}`, `photon_search_request_duration_seconds` |
 
 ### Infrastructure
 
@@ -56,6 +57,8 @@ All Prometheus ports for custom services are configurable via environment variab
 | `PHOTON_CLEANUP_BATCH_WAIT_MS` | `100` | Cleanup-worker batch collection wait |
 | `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor |
 | `PROMETHEUS_PORT` | `9090` | Prometheus server host port |
+| `QDRANT_IMAGE` | `qdrant/qdrant:v1.19.1` | Pinned Qdrant image |
+| `SPARSE_MODEL_NAME` | `Qdrant/bm25` | FastEmbed lexical model used by Embedder and Search |
 
 The frontier serves metrics on the same port as its REST API (default `8080`).
 Scheduling and deduplication totals are aggregated from the Redis scheduler
@@ -117,6 +120,11 @@ endpoints are disabled by default and are enabled only by
 - Redis Connected Clients
 - MinIO Object Distribution
 - Qdrant Collection Stats
+
+### Search Retrieval (Row 4)
+- Hybrid versus dense fallback requests — `photon_search_retrieval_requests_total{mode}`
+- Search p95 latency — `histogram_quantile(0.95, rate(photon_search_request_duration_seconds_bucket[5m]))`
+- Search result volume — `rate(photon_search_results_total[5m])`
 
 ## Implementation Details
 

@@ -4,7 +4,7 @@ Photon is an event-driven web-crawling pipeline. Its central design rule is
 that **the Frontier owns admission to a target host**: it normalizes a URL,
 evaluates robots policy, reserves a host request slot, and only then makes the
 URL available to a worker. Kafka decouples the stages; Redis holds Frontier
-state; MinIO carries HTML outside Kafka; and Qdrant stores the final vectors.
+state; MinIO carries HTML outside Kafka; and Qdrant stores the final dense and sparse vectors.
 
 The interactive component diagram is available at
 [Architecture diagram](architecture-assets/photon-system-architecture.html).
