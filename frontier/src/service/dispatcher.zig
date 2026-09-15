@@ -10,6 +10,7 @@ pub const Dispatcher = struct {
     dynamic_urls_topic: []const u8,
     io: std.Io,
     allocator: std.mem.Allocator,
+    shard_cursor: u8 = 0,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -38,8 +39,8 @@ pub const Dispatcher = struct {
             // A ready-host index replaces the previous full active_domains scan.
             // Each claim removes exactly one due host, so dispatcher replicas do
             // not publish its queue concurrently.
-            for (0..frontier_shard_count) |shard_index| {
-                const shard: u8 = @intCast(shard_index);
+            for (0..frontier_shard_count) |step| {
+                const shard: u8 = @intCast((@as(usize, self.shard_cursor) + step) % frontier_shard_count);
                 const maybe_domain = self.cache.claimReadyHost(self.allocator, shard, current_time) catch |err| {
                     std.log.err("Error claiming ready host in shard {d}: {}", .{ shard, err });
                     continue;
@@ -72,6 +73,7 @@ pub const Dispatcher = struct {
                     if (next_ready_at == null or candidate < next_ready_at.?) next_ready_at = candidate;
                 }
             }
+            self.shard_cursor = @intCast((@as(usize, self.shard_cursor) + 1) % frontier_shard_count);
             // Wake at the earliest reservation instead of a fixed one-second
             // cadence. One millisecond is the clock/OS scheduling floor and
             // avoids a busy spin for overdue work.
