@@ -65,13 +65,19 @@ class VectorStoreRepository:
         )
         logger.info(f"VectorStore: Upserted document for URL {url} into Qdrant.")
 
-    def insert_batch(self, documents: list[dict[str, str]], embeddings: Any):
+    def insert_batch(self, documents: list[dict[str, str]], embeddings: Any, sparse_embeddings: Any = None):
         """Wait for one Qdrant upsert request containing an entire batch."""
         points = []
-        for document, embedding in zip(documents, embeddings, strict=True):
+        sparse_embeddings = sparse_embeddings or [None] * len(documents)
+        for document, embedding, sparse_embedding in zip(documents, embeddings, sparse_embeddings, strict=True):
+            vector = {self.dense_vector_name: embedding.tolist() if hasattr(embedding, "tolist") else embedding}
+            if sparse_embedding is not None:
+                vector[self.sparse_vector_name] = models.SparseVector(
+                    indices=list(sparse_embedding.indices), values=list(sparse_embedding.values)
+                )
             points.append(models.PointStruct(
                 id=str(uuid.uuid5(uuid.NAMESPACE_URL, document["url"] + f"#chunk:{document.get('chunk_index', 0)}")),
-                vector={self.dense_vector_name: embedding.tolist() if hasattr(embedding, "tolist") else embedding},
+                vector=vector,
                 payload={
                     "url": document["url"], "title": document["title"], "text": document["text"],
                     "chunk_index": document.get("chunk_index", 0),

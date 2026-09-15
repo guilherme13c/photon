@@ -41,6 +41,7 @@ class EmbeddingProcessorService:
         max_text_chars: int = 8192,
         chunk_max_tokens: int = 450,
         chunk_overlap_tokens: int = 60,
+        sparse_encoder=None,
     ):
         logger.info(f"Loading SentenceTransformer model '{model_name}'...")
         self.model = SentenceTransformer(model_name)
@@ -51,6 +52,13 @@ class EmbeddingProcessorService:
         self.seen_content_hashes: set[str] = set()
         self.chunk_max_tokens = chunk_max_tokens
         self.chunk_overlap_tokens = chunk_overlap_tokens
+        if sparse_encoder is None:
+            try:
+                from src.service.sparse import SparseEncoder
+                sparse_encoder = SparseEncoder()
+            except ImportError:
+                sparse_encoder = None
+        self.sparse_encoder = sparse_encoder
         logger.info("Model loaded.")
 
     def process_message(self, message: bytes):
@@ -127,7 +135,8 @@ class EmbeddingProcessorService:
                 embeddings = self.model.encode(model_inputs, batch_size=self.batch_size, show_progress_bar=False)
                 embedding_stage_seconds.labels(stage="model_encode").observe(time.monotonic() - stage_started)
                 stage_started = time.monotonic()
-                self.vector_store.insert_batch(documents, embeddings)
+                sparse_embeddings = self.sparse_encoder.encode(model_inputs) if self.sparse_encoder else None
+                self.vector_store.insert_batch(documents, embeddings, sparse_embeddings)
                 embedding_stage_seconds.labels(stage="qdrant_upsert").observe(time.monotonic() - stage_started)
                 completed_at_ms = int(time.time() * 1000)
                 for document in documents:

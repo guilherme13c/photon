@@ -4,6 +4,7 @@ from src.repository.kafka_consumer import KafkaConsumerRepository
 from src.repository.vector_store import VectorStoreRepository
 from src.repository.kafka_producer import KafkaProducerRepository
 from src.service.processor import EmbeddingProcessorService
+from src.service.sparse import SparseEncoder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class EmbedderWorker:
             batch_size=config.batch_size, max_text_chars=config.max_text_chars,
             chunk_max_tokens=config.chunk_max_tokens,
             chunk_overlap_tokens=config.chunk_overlap_tokens,
+            sparse_encoder=SparseEncoder(config.sparse_model_name),
         )
         self.consumer = KafkaConsumerRepository(
             broker=config.kafka_broker,
