@@ -25,6 +25,6 @@ To run the unit tests using `pytest` and `pytest-mock`:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 pytest tests/
 ```
