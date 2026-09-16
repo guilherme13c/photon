@@ -20,9 +20,9 @@ jobs:
       - name: Install Frontier native dependencies
         run: sudo apt-get update && sudo apt-get install --yes libhiredis-dev librdkafka-dev
       - name: Install embedder test dependencies
-        run: python -m venv .venv && .venv/bin/pip install -r embedder/requirements.txt
+        run: python -m venv .venv && .venv/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r embedder/requirements.txt
       - name: Fast gate
-        run: make test-fast
+        run: . .venv/bin/activate && make test-fast
       - name: Validate benchmark result schema
         run: make benchmark-smoke
 
