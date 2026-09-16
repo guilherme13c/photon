@@ -12,4 +12,9 @@ pub const Cfg = struct {
     kafka_dlq_topic: []const u8 = "frontier-dlq",
     kafka_urls_topic: []const u8 = "urls",
     kafka_dynamic_urls_topic: []const u8 = "dynamic-urls",
+    /// Number of independent Kafka/Redis admission lanes in one process.
+    admission_workers: u8 = 1,
+    /// Deadline for one robots.txt request before treating the policy as
+    /// unavailable and applying the scheduler's conservative default delay.
+    robots_request_timeout_seconds: u16 = 2,
 };

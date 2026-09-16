@@ -7,9 +7,51 @@ const Service = @import("service/service.zig").Service;
 const Dispatcher = @import("service/dispatcher.zig").Dispatcher;
 const RestServer = @import("transport/rest/server.zig").RestServer;
 const _sitemap_tests = @import("service/sitemap.zig");
+const _offset_tracker_tests = @import("repository/kafka/consumer/offset_tracker.zig");
+const Cfg = @import("config/cfg.zig").Cfg;
 
 // global atomic flag for signal handling
 var keep_running = std.atomic.Value(bool).init(true);
+
+const AdmissionWorkerArgs = struct {
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    cfg: *const Cfg,
+};
+
+fn runAdmissionWorker(args: AdmissionWorkerArgs) void {
+    var redis = Redis.init(args.cfg.redis_url, args.io) catch |err| {
+        std.log.err("Admission worker Redis init failed: {}", .{err});
+        return;
+    };
+    defer redis.deinit();
+    var producer = KafkaProducer.init(args.cfg.kafka_brokers, args.cfg.kafka_dlq_topic) catch |err| {
+        std.log.err("Admission worker Kafka producer init failed: {}", .{err});
+        return;
+    };
+    defer producer.deinit();
+    var consumer = KafkaConsumer.init(
+        args.cfg.kafka_brokers,
+        args.cfg.kafka_group_id,
+        args.cfg.kafka_ingest_topic,
+        args.io,
+    ) catch |err| {
+        std.log.err("Admission worker Kafka consumer init failed: {}", .{err});
+        return;
+    };
+    defer consumer.deinit();
+    var service = Service.initWithRobotsTimeout(
+        args.allocator,
+        args.io,
+        redis.interface(),
+        producer.interface(),
+        args.cfg.kafka_ingest_topic,
+        args.cfg.robots_request_timeout_seconds,
+    );
+    service.startConsuming(consumer.interface()) catch |err| {
+        std.log.err("Admission worker stopped: {}", .{err});
+    };
+}
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
@@ -30,40 +72,31 @@ pub fn main(init: std.process.Init) !void {
         mutable_path,
     );
 
-    var redis = try Redis.init(cfg.redis_url, init.io);
-    defer redis.deinit();
-
-    var kafka_producer = try KafkaProducer.init(
-        cfg.kafka_brokers,
-        cfg.kafka_dlq_topic,
-    );
-    defer kafka_producer.deinit();
-
-    var kafka_consumer = try KafkaConsumer.init(
-        cfg.kafka_brokers,
-        cfg.kafka_group_id,
-        cfg.kafka_ingest_topic,
-    );
-    defer kafka_consumer.deinit();
-
-    var service = Service.init(
-        allocator,
-        init.io,
-        redis.interface(),
-        kafka_producer.interface(),
-        cfg.kafka_ingest_topic,
-    );
-
     setupSignalHandlers() catch |err| {
         std.log.err("Signal handler setup failed: {}", .{err});
     };
 
     if (std.mem.eql(u8, cfg.role, "admission")) {
-        std.log.info("Starting admission worker for {s}", .{cfg.kafka_ingest_topic});
-        try service.startConsuming(kafka_consumer.interface());
+        const worker_count = std.math.clamp(cfg.admission_workers, 1, 64);
+        std.log.info("Starting {d} admission worker lanes for {s}", .{ worker_count, cfg.kafka_ingest_topic });
+        var workers: [64]std.Thread = undefined;
+        for (0..worker_count) |index| {
+            workers[index] = try std.Thread.spawn(.{}, runAdmissionWorker, .{AdmissionWorkerArgs{
+                .allocator = allocator,
+                .io = init.io,
+                .cfg = cfg,
+            }});
+        }
+        for (workers[0..worker_count]) |worker| worker.join();
         return;
     }
     if (!std.mem.eql(u8, cfg.role, "manager")) return error.InvalidFrontierRole;
+
+    var redis = try Redis.init(cfg.redis_url, init.io);
+    defer redis.deinit();
+    var kafka_producer = try KafkaProducer.init(cfg.kafka_brokers, cfg.kafka_dlq_topic);
+    defer kafka_producer.deinit();
+    var service = Service.init(allocator, init.io, redis.interface(), kafka_producer.interface(), cfg.kafka_ingest_topic);
 
     // Candidate URLs enter the durable Kafka topic through the REST surface;
     // manager instances do not consume that backlog or perform admission.

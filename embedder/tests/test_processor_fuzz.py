@@ -25,7 +25,7 @@ def test_seeded_malformed_document_corpus_never_raises():
     service.batch_size = 32
     service.max_text_chars = 8192
     rng = random.Random(20260911)
-    corpus = [b"", b"{", b"[]", b'{"url":"https://fixture","text":"ok"}', b"\xff\x00"]
+    corpus = [b"", b"{", b"[]", b'{"url":"https://fixture","text":"This fixture contains enough meaningful words to be indexed."}', b"\xff\x00"]
     corpus.extend(bytes(rng.randrange(256) for _ in range(rng.randrange(0, 256))) for _ in range(200))
     for message in corpus:
         service.process_message(message)

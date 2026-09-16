@@ -247,9 +247,18 @@ def wait_for_documents(qdrant: str, collection: str, urls: set[str], timeout: in
 
 def run_function(output: Path) -> int:
     result = new_result("function", {"corpus": "mixed-crawl.v1", "warmup_seconds": 0, "samples_per_case": 5})
+    # The desktop runtime may mount the user's shared language caches
+    # read-only. Keep benchmark artifacts isolated and writable so a healthy
+    # benchmark is not reported as a service failure because compilation could
+    # not update a host cache.
+    benchmark_cache = Path("/tmp/photon-function-benchmark-cache")
+    benchmark_cache.mkdir(parents=True, exist_ok=True)
+    benchmark_env = os.environ.copy()
+    benchmark_env["ZIG_GLOBAL_CACHE_DIR"] = str(benchmark_cache / "zig-global")
+    benchmark_env["GOCACHE"] = str(benchmark_cache / "go-build")
     commands = {
-        "frontier": ["zig", "build", "bench", "-Doptimize=ReleaseFast"],
-        "extractor": ["zig", "build", "bench", "-Doptimize=ReleaseFast"],
+        "frontier": ["zig", "build", "bench", "-Doptimize=ReleaseFast", "--cache-dir", str(benchmark_cache / "frontier")],
+        "extractor": ["zig", "build", "bench", "-Doptimize=ReleaseFast", "--cache-dir", str(benchmark_cache / "extractor")],
         "fetcher": ["go", "test", "-run=^$", "-bench=.", "-benchmem", "./service"],
         "renderer": ["go", "test", "-run=^$", "-bench=.", "-benchmem", "./service"],
         "embedder": [sys.executable, "tests/performance/microbench_embedder.py"],
@@ -259,7 +268,7 @@ def run_function(output: Path) -> int:
         cwd = ROOT / name if name in {"frontier", "extractor", "fetcher", "renderer"} else ROOT
         started = time.perf_counter()
         try:
-            completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, timeout=300, check=False)
+            completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, timeout=300, check=False, env=benchmark_env)
             result["samples"].append({"case": name, "elapsed_ms": (time.perf_counter() - started) * 1000, "exit_code": completed.returncode, "output": completed.stdout[-12000:], "stderr": completed.stderr[-4000:]})
             if completed.returncode:
                 invalidate(result, f"{name} microbenchmark failed")

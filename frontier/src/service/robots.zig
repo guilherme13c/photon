@@ -3,24 +3,42 @@ const NormalizedUrl = @import("normalization.zig").NormalizedUrl;
 const _Redis = @import("../repository/redis/interface.zig")._Redis;
 
 pub const RobotsChecker = struct {
-    const request_timeout_seconds = 5;
-
+    // Robots is a guardrail, not the crawler's work item. A slow or
+    // unreachable policy endpoint is negatively cached by `check`, so keep
+    // the admission lane moving and let the scheduler's conservative default
+    // delay govern the URL when this deadline expires.
     allocator: std.mem.Allocator,
     io: std.Io,
     cache: _Redis,
     user_agent: []const u8,
+    request_timeout_seconds: u16,
+    inflight_mutex: std.Io.Mutex = .init,
+    inflight: std.StringHashMap(*RobotsFlight),
+
+    const RobotsFlight = struct {
+        key: []u8,
+        // An empty policy is the shared representation for an unavailable
+        // robots endpoint. It preserves the existing fail-open behavior.
+        policy: []u8 = &.{},
+        done: bool = false,
+        participants: usize = 1,
+        condition: std.Io.Condition = .init,
+    };
 
     pub fn init(
         allocator: std.mem.Allocator,
         io: std.Io,
         cache: _Redis,
         user_agent: []const u8,
+        request_timeout_seconds: u16,
     ) RobotsChecker {
         return .{
             .allocator = allocator,
             .io = io,
             .cache = cache,
             .user_agent = user_agent,
+            .request_timeout_seconds = @max(request_timeout_seconds, 1),
+            .inflight = std.StringHashMap(*RobotsFlight).init(allocator),
         };
     }
 
@@ -28,10 +46,17 @@ pub const RobotsChecker = struct {
         allowed: bool,
         // null means the policy did not specify Crawl-delay.
         crawl_delay_ms: ?i64,
+        // Owned by the decision. Keeping the policy avoids a second cache
+        // round-trip for admission's sitemap seeding path.
+        policy: ?[]const u8 = null,
+
+        pub fn deinit(self: Decision, allocator: std.mem.Allocator) void {
+            if (self.policy) |policy| allocator.free(policy);
+        }
     };
 
     pub fn check(
-        self: RobotsChecker,
+        self: *RobotsChecker,
         url: NormalizedUrl,
         domain: []const u8,
     ) !Decision {
@@ -47,28 +72,121 @@ pub const RobotsChecker = struct {
             self.allocator,
             cache_key,
         );
-        defer if (robots_txt) |txt| self.allocator.free(txt);
 
         if (robots_txt == null) {
-            robots_txt = self.fetchRobots(domain, scheme);
-            if (robots_txt) |txt| {
-                try self.cache.setCache(
-                    cache_key,
-                    txt,
-                    86400,
-                );
-            } else {
-                // Cache an unavailable policy briefly. This prevents every
-                // queued URL from retrying a broken robots endpoint; requests
-                // still use the scheduler's conservative default delay.
-                try self.cache.setCache(cache_key, "", 300);
-            }
+            robots_txt = try self.fetchPolicySingleFlight(cache_key, domain, scheme);
         }
 
         const policy_text = robots_txt orelse return .{ .allowed = true, .crawl_delay_ms = null };
         const path = extractPath(url.canonical);
+        var decision = evaluate(policy_text, self.user_agent, path);
+        decision.policy = policy_text;
+        return decision;
+    }
 
-        return evaluate(policy_text, self.user_agent, path);
+    /// Fetch one robots policy per domain at a time within this admission
+    /// process. Kafka keeps a domain on one partition, but that partition is
+    /// processed by several worker threads, so without this gate a burst of
+    /// URLs can all miss Redis and hit the same origin concurrently.
+    fn fetchPolicySingleFlight(
+        self: *RobotsChecker,
+        cache_key: []const u8,
+        domain: []const u8,
+        scheme: []const u8,
+    ) ![]const u8 {
+        var flight: *RobotsFlight = undefined;
+        var owner = false;
+
+        self.inflight_mutex.lockUncancelable(self.io);
+        if (self.inflight.get(cache_key)) |existing| {
+            flight = existing;
+            flight.participants += 1;
+        } else {
+            const key = self.allocator.dupe(u8, cache_key) catch |err| {
+                self.inflight_mutex.unlock(self.io);
+                return err;
+            };
+            flight = self.allocator.create(RobotsFlight) catch |err| {
+                self.allocator.free(key);
+                self.inflight_mutex.unlock(self.io);
+                return err;
+            };
+            flight.* = .{ .key = key };
+            self.inflight.put(key, flight) catch |err| {
+                self.allocator.destroy(flight);
+                self.allocator.free(key);
+                self.inflight_mutex.unlock(self.io);
+                return err;
+            };
+            owner = true;
+        }
+        self.inflight_mutex.unlock(self.io);
+
+        if (owner) {
+            const fetched = self.fetchRobots(domain, scheme);
+            const policy = fetched orelse try self.allocator.dupe(u8, "");
+            if (fetched) |txt| {
+                self.cache.setCache(cache_key, txt, 86400) catch |err| {
+                    self.inflight_mutex.lockUncancelable(self.io);
+                    self.completeFlight(flight, policy);
+                    self.releaseFlight(flight);
+                    self.inflight_mutex.unlock(self.io);
+                    return err;
+                };
+            } else {
+                // Cache an unavailable policy briefly. This prevents every
+                // queued URL from retrying a broken robots endpoint; requests
+                // still use the scheduler's conservative default delay.
+                self.cache.setCache(cache_key, "", 300) catch |err| {
+                    self.inflight_mutex.lockUncancelable(self.io);
+                    self.completeFlight(flight, policy);
+                    self.releaseFlight(flight);
+                    self.inflight_mutex.unlock(self.io);
+                    return err;
+                };
+            }
+            self.inflight_mutex.lockUncancelable(self.io);
+            self.completeFlight(flight, policy);
+            const result = self.cloneAndRelease(flight) catch |err| {
+                self.inflight_mutex.unlock(self.io);
+                return err;
+            };
+            self.inflight_mutex.unlock(self.io);
+            return result;
+        } else {
+            self.inflight_mutex.lockUncancelable(self.io);
+            while (!flight.done) {
+                flight.condition.waitUncancelable(self.io, &self.inflight_mutex);
+            }
+            const result = self.cloneAndRelease(flight) catch |err| {
+                self.inflight_mutex.unlock(self.io);
+                return err;
+            };
+            self.inflight_mutex.unlock(self.io);
+            return result;
+        }
+    }
+
+    fn completeFlight(self: *RobotsChecker, flight: *RobotsFlight, policy: []u8) void {
+        flight.policy = policy;
+        flight.done = true;
+        flight.condition.broadcast(self.io);
+    }
+
+    fn releaseFlight(self: *RobotsChecker, flight: *RobotsFlight) void {
+        flight.participants -= 1;
+        if (flight.participants != 0 or !flight.done) return;
+        _ = self.inflight.remove(flight.key);
+        self.allocator.free(flight.key);
+        self.allocator.free(flight.policy);
+        self.allocator.destroy(flight);
+    }
+
+    /// Must be called while `inflight_mutex` is held.
+    fn cloneAndRelease(self: *RobotsChecker, flight: *RobotsFlight) ![]const u8 {
+        const result = try self.allocator.dupe(u8, flight.policy);
+        self.releaseFlight(flight);
+        return result;
     }
 
     /// Rendering uses a cached policy rather than performing a second robots
@@ -82,7 +200,7 @@ pub const RobotsChecker = struct {
         return extractCrawlDelayMs(policy_text, self.user_agent);
     }
 
-    fn fetchRobots(self: RobotsChecker, domain: []const u8, scheme: []const u8) ?[]const u8 {
+    fn fetchRobots(self: RobotsChecker, domain: []const u8, scheme: []const u8) ?[]u8 {
         var client = std.http.Client{
             .allocator = self.allocator,
             .io = self.io,
@@ -108,13 +226,13 @@ pub const RobotsChecker = struct {
             .port = uri.port orelse if (std.mem.eql(u8, scheme, "https")) 443 else 80,
             .protocol = if (std.mem.eql(u8, scheme, "https")) .tls else .plain,
             .timeout = .{ .duration = .{
-                .raw = std.Io.Duration.fromSeconds(request_timeout_seconds),
+                .raw = std.Io.Duration.fromSeconds(self.request_timeout_seconds),
                 .clock = .real,
             } },
         }) catch return null;
 
         var socket_timeout = std.posix.timeval{
-            .sec = request_timeout_seconds,
+            .sec = self.request_timeout_seconds,
             .usec = 0,
         };
         const socket_timeout_bytes = std.mem.asBytes(&socket_timeout);
@@ -251,6 +369,37 @@ pub fn evaluatePolicy(
 
 fn extractCrawlDelayMs(robots_txt: []const u8, user_agent: []const u8) ?i64 {
     return evaluate(robots_txt, user_agent, "/").crawl_delay_ms;
+}
+
+test "single-flight retains the policy until the last participant releases" {
+    const MockRedis = @import("../repository/redis/mock.zig").MockRedis;
+    var mock = MockRedis.init(std.testing.allocator);
+    defer mock.deinit();
+    var threaded_io: std.Io.Threaded = .init_single_threaded;
+    const io = threaded_io.io();
+    var checker = RobotsChecker.init(std.testing.allocator, io, mock.interface(), "frontier-bot", 2);
+
+    const key = try std.testing.allocator.dupe(u8, "robots:https:example.com");
+    const flight = try std.testing.allocator.create(RobotsChecker.RobotsFlight);
+    flight.* = .{ .key = key, .participants = 2 };
+    try checker.inflight.put(key, flight);
+
+    checker.inflight_mutex.lockUncancelable(io);
+    checker.completeFlight(flight, try std.testing.allocator.dupe(u8, "User-agent: *\nAllow: /\n"));
+    const first = try checker.cloneAndRelease(flight);
+    checker.inflight_mutex.unlock(io);
+    defer std.testing.allocator.free(first);
+
+    try std.testing.expectEqual(@as(usize, 1), checker.inflight.count());
+    try std.testing.expectEqualStrings("User-agent: *\nAllow: /\n", first);
+
+    checker.inflight_mutex.lockUncancelable(io);
+    const second = try checker.cloneAndRelease(flight);
+    checker.inflight_mutex.unlock(io);
+    defer std.testing.allocator.free(second);
+
+    try std.testing.expectEqualStrings(first, second);
+    try std.testing.expectEqual(@as(usize, 0), checker.inflight.count());
 }
 
 fn ruleMatchLength(rule: []const u8, target: []const u8) ?usize {

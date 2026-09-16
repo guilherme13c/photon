@@ -11,7 +11,7 @@ class Embedder:
 
 class Repository:
     def search(self, _vector, limit, offset):
-        assert limit == 1 and offset == 0
+        assert limit == 50 and offset == 0
         return [{"id": "one", "score": 0.9, "text": "result", "chunk_index": 0}]
 
 

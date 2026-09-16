@@ -1,11 +1,32 @@
-"""Structure-aware, dependency-free text chunking for embedding inputs."""
+"""Structure-aware, dependency-free text cleaning and chunking."""
+
+import html
+import re
+
+
+_TAG_RE = re.compile(r"<[^>]{1,512}>")
+_SPACE_RE = re.compile(r"\s+")
+_MEANINGFUL_RE = re.compile(r"[\wÀ-ÖØ-öø-ÿ]", re.UNICODE)
+
+
+def clean_text(text: str) -> str:
+    """Remove residual markup and normalize whitespace before embedding."""
+    text = html.unescape(text)
+    text = _TAG_RE.sub(" ", text)
+    return _SPACE_RE.sub(" ", text).strip()
+
+
+def is_meaningful(text: str, min_chars: int = 20, min_words: int = 4) -> bool:
+    """Reject markup fragments and tiny chunks with little retrieval value."""
+    cleaned = clean_text(text)
+    return len(cleaned) >= min_chars and len(cleaned.split()) >= min_words and bool(_MEANINGFUL_RE.search(cleaned))
 
 
 def _words(text: str) -> list[str]:
     return text.split()
 
 
-def chunk_text(text: str, max_tokens: int = 450, overlap_tokens: int = 60) -> list[str]:
+def chunk_text(text: str, max_tokens: int = 320, overlap_tokens: int = 48) -> list[str]:
     """Split text on blank lines while bounding approximate token count.
 
     Word count is used as a stable approximation here; the model tokenizer is

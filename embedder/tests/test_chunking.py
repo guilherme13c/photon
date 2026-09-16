@@ -1,6 +1,15 @@
 import pytest
 
-from src.service.chunking import chunk_text
+from src.service.chunking import chunk_text, clean_text, is_meaningful
+
+
+def test_clean_text_removes_markup_and_normalizes_whitespace():
+    assert clean_text("<p>Hello&nbsp;world</p>\n\nagain") == "Hello world again"
+
+
+def test_tiny_markup_fragment_is_not_meaningful():
+    assert not is_meaningful('me\\" />')
+    assert is_meaningful("A useful document contains enough words to retrieve reliably.")
 
 
 def test_short_document_stays_as_one_chunk():

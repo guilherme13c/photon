@@ -45,6 +45,7 @@ pub fn main(init: std.process.Init) !void {
         init.io,
         kafka_producer.interface(),
         cfg.minio_endpoint,
+        cfg.max_discovered_urls_per_page,
     );
 
     // Start metrics server in a separate thread

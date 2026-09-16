@@ -33,6 +33,10 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
         config.minio_endpoint = try allocator.dupe(u8, std.mem.span(val));
     }
 
+    if (std.c.getenv("MAX_DISCOVERED_URLS_PER_PAGE")) |val| {
+        config.max_discovered_urls_per_page = try std.fmt.parseInt(u32, std.mem.span(val), 10);
+    }
+
     var file = std.Io.Dir.cwd().openFile(
         io,
         path,
@@ -105,6 +109,10 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
         } else if (std.mem.eql(u8, key, "PROMETHEUS_PORT")) {
             if (val.len > 0) {
                 config.prometheus_port = try std.fmt.parseInt(u16, val, 10);
+            }
+        } else if (std.mem.eql(u8, key, "MAX_DISCOVERED_URLS_PER_PAGE")) {
+            if (val.len > 0) {
+                config.max_discovered_urls_per_page = try std.fmt.parseInt(u32, val, 10);
             }
         }
     }

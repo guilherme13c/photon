@@ -28,7 +28,10 @@ def main():
     port = int(os.getenv("SEARCH_PORT", "8082"))
     sparse_encoder = SparseEncoder(os.getenv("SPARSE_MODEL_NAME", "Qdrant/bm25"))
     authority_weight = float(os.getenv("SEARCH_AUTHORITY_WEIGHT", "0.08"))
-    server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(LocalEmbedder(model), repository, metrics, sparse_encoder=sparse_encoder, authority_weight=authority_weight))
+    reranker_weight = float(os.getenv("SEARCH_RERANKER_WEIGHT", "0.4"))
+    from .rerank import LexicalReranker
+    reranker = LexicalReranker(reranker_weight)
+    server = ThreadingHTTPServer(("0.0.0.0", port), make_handler(LocalEmbedder(model), repository, metrics, sparse_encoder=sparse_encoder, authority_weight=authority_weight, reranker=reranker))
     logging.info("search service listening on %s", port)
     server.serve_forever()
 

@@ -1,12 +1,13 @@
 import base64
 import hashlib
 from .stopwords import remove_stop_words
+from .rerank import LexicalReranker
 import json
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
 RETRIEVAL_VERSION = "hybrid-rrf-pagerank-v3"
-MIN_SCORE = 0.5
+CANDIDATE_MULTIPLIER = 5
 
 
 def validate_request(query, limit, cursor):
@@ -47,22 +48,41 @@ def decode_cursor(query, value):
 
 
 class SearchService:
-    def __init__(self, embedder, repository, sparse_encoder=None, authority_weight=0.0):
+    def __init__(self, embedder, repository, sparse_encoder=None, authority_weight=0.0, reranker=None):
         self.embedder = embedder
         self.repository = repository
         self.sparse_encoder = sparse_encoder
         self.authority_weight = max(0.0, min(float(authority_weight), 0.25))
+        self.reranker = reranker or LexicalReranker()
 
     def search(self, query, limit, cursor):
         query, limit, cursor = validate_request(query, limit, cursor)
         offset = decode_cursor(query, cursor)
+        candidate_limit = max(50, limit * CANDIDATE_MULTIPLIER)
         dense_vector = self.embedder.embed(query)
         if self.sparse_encoder:
             sparse_vector = self.sparse_encoder.encode([remove_stop_words(query)])[0]
-            results = self.repository.search(dense_vector, limit, offset, sparse_vector=sparse_vector)
+            results = self.repository.search(dense_vector, candidate_limit, offset, sparse_vector=sparse_vector)
         else:
-            results = self.repository.search(dense_vector, limit, offset)
-        results = [item for item in results if float(item.get("score", 0.0)) >= MIN_SCORE]
+            results = self.repository.search(dense_vector, candidate_limit, offset)
+
+        # RRF scores are rank-fusion scores, not cosine similarities. A fixed
+        # dense-style threshold would discard most valid hybrid matches.
+        # Keep the retrieved ordering and apply quality/ranking policy below.
+        deduplicated = []
+        seen_urls = set()
+        for item in results:
+            text = str(item.get("text", "")).strip()
+            if item.get("url") and text and (len(text) < 20 or len(text.split()) < 4):
+                continue
+            url = item.get("url", "")
+            if url and url in seen_urls:
+                continue
+            if url:
+                seen_urls.add(url)
+            deduplicated.append(item)
+        results = deduplicated[:limit]
+        results = self.reranker.rerank(query, results)
         if self.authority_weight:
             for item in results:
                 authority = max(0.0, min(float(item.get("authority_score", 0.0)), 1.0))
@@ -74,6 +94,6 @@ class SearchService:
             for item in results:
                 del item["_rank_score"]
         response = {"results": results, "retrieval": "hybrid_rrf" if self.sparse_encoder else "dense"}
-        if len(results) == limit:
-            response["next_cursor"] = encode_cursor(query, offset + len(results))
+        if len(results) == limit and len(deduplicated) >= limit:
+            response["next_cursor"] = encode_cursor(query, offset + candidate_limit)
         return response

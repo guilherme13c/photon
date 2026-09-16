@@ -96,7 +96,14 @@ services:
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic embedder-dlq --replication-factor 1 --partitions 1
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic object-cleanup --replication-factor 1 --partitions 12
         kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic dynamic-urls --replication-factor 1 --partitions 12
-        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic discovered-urls --replication-factor 1 --partitions 12
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic discovered-urls --replication-factor 1 --partitions 24
+        # Existing volumes may still contain the original 12-partition topic.
+        # Kafka permits increasing the partition count, so converge it here on
+        # every startup without touching retained data.
+        current_partitions="$(kafka-topics --bootstrap-server kafka:29092 --describe --topic discovered-urls | sed -n 's/.*PartitionCount:[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+        if [ "$$current_partitions" -lt 24 ]; then
+          kafka-topics --bootstrap-server kafka:29092 --alter --topic discovered-urls --partitions 24
+        fi
 
         echo 'Successfully created the following topics:'
         kafka-topics --bootstrap-server kafka:29092 --list
@@ -192,9 +199,18 @@ services:
       KAFKA_INGEST_TOPIC: discovered-urls
       KAFKA_GROUP_ID: admission-workers
       KAFKA_DLQ_TOPIC: frontier-dlq
+      ROBOTS_REQUEST_TIMEOUT_SECONDS: ${ROBOTS_REQUEST_TIMEOUT_SECONDS:-2}
+      # Each lane owns its Kafka consumer and Redis connection. Increase this
+      # together with the container replica count until Kafka partitions are
+      # fully utilized, subject to Redis and origin capacity.
+      FRONTIER_ADMISSION_WORKERS: ${PHOTON_ADMISSION_WORKERS:-2}
     restart: unless-stopped
     deploy:
-      replicas: ${PHOTON_ADMISSION_REPLICAS:-3}
+      # Keep twelve active lanes while the existing backlog drains. The
+      # topic has 24 partitions for future scale-out, but adding consumers
+      # beyond the original active partition set does not redistribute old
+      # records and increases rebalance churn.
+      replicas: ${PHOTON_ADMISSION_REPLICAS:-6}
       resources:
         limits:
           cpus: '0.5'
@@ -216,6 +232,7 @@ services:
       KAFKA_CLEANED_TOPIC: ${EXTRACTOR_KAFKA_CLEANED_TOPIC:-cleaned_documents}
       KAFKA_GROUP_ID: ${EXTRACTOR_KAFKA_GROUP_ID:-extractor-group}
       KAFKA_DLQ_TOPIC: ${EXTRACTOR_KAFKA_DLQ_TOPIC:-extractor-dlq}
+      MAX_DISCOVERED_URLS_PER_PAGE: ${MAX_DISCOVERED_URLS_PER_PAGE:-100}
       PROMETHEUS_PORT: ${EXTRACTOR_PROMETHEUS_PORT:-8001}
     deploy:
       replicas: ${PHOTON_EXTRACTOR_REPLICAS:-2}
@@ -276,6 +293,7 @@ services:
       QDRANT_DENSE_VECTOR_NAME: ${QDRANT_DENSE_VECTOR_NAME:-dense}
       QDRANT_SPARSE_VECTOR_NAME: ${QDRANT_SPARSE_VECTOR_NAME:-sparse}
       SEARCH_VECTOR_DIMENSIONS: ${SEARCH_VECTOR_DIMENSIONS:-384}
+      SEARCH_RERANKER_WEIGHT: ${SEARCH_RERANKER_WEIGHT:-0.4}
     ports:
       - "${SEARCH_PORT:-8082}:8082"
     volumes:
@@ -432,6 +450,10 @@ services:
   tempo:
     image: grafana/tempo:2.6.1
     command: ["-config.file=/etc/tempo/config.yml"]
+    # The bundled named volume is root-owned on first creation while Tempo
+    # runs as UID 10001. Keep the local Compose deployment writable; use a
+    # pre-owned bind mount instead for production deployments.
+    user: "0:0"
     volumes:
       - ./config/tempo.yml:/etc/tempo/config.yml:ro
       - tempo_data:/tmp/tempo

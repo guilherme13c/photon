@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 from .stopwords import remove_stop_words
 from src.repository.vector_store import VectorStoreRepository
 from src.service.contracts import is_duplicate_content, parse_cleaned_document
-from src.service.chunking import chunk_text
+from src.service.chunking import chunk_text, clean_text, is_meaningful
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +74,8 @@ class EmbeddingProcessorService:
                     data = json.loads(message.decode("utf-8"))
                     data = parse_cleaned_document(data)
                     url = data["url"]
-                    title = data.get("title", "")
-                    text = data.get("text", "")
+                    title = clean_text(data.get("title", ""))
+                    text = clean_text(data.get("text", ""))
                     s3_key = data.get("s3_key", "")
                     pipeline_started_at_ms = data.get("pipeline_started_at_ms")
                     correlation_id = data.get("correlation_id")
@@ -95,7 +95,7 @@ class EmbeddingProcessorService:
                     if is_duplicate_content(content_hash, seen_content_hashes):
                         embeddings_processed_total.labels(status="duplicate").inc()
                         continue
-                    if text:
+                    if text and is_meaningful(text):
                         documents.append({
                             "url": url,
                             "title": title,
@@ -106,7 +106,7 @@ class EmbeddingProcessorService:
                             "outbound_urls": data.get("outbound_urls", []),
                         })
                     else:
-                        embeddings_processed_total.labels(status="empty").inc()
+                        embeddings_processed_total.labels(status="filtered").inc()
                 except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
                     embeddings_processed_total.labels(status="decode_error").inc()
                     if self.producer:

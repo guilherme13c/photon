@@ -9,4 +9,5 @@ pub const Cfg = struct {
     kafka_dlq_topic: []const u8 = "extractor-dlq",
     minio_endpoint: []const u8 = "http://localhost:9000",
     prometheus_port: u16 = 8001,
+    max_discovered_urls_per_page: u32 = 100,
 };

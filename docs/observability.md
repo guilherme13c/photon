@@ -66,6 +66,7 @@ All Prometheus ports for custom services are configurable via environment variab
 | `PHOTON_TOKENIZERS_PARALLELISM` | `false` | Prevent tokenizer thread oversubscription |
 | `PHOTON_EMBED_MAX_TEXT_CHARS` | `8192` | Input bound before tokenization |
 | `PHOTON_CLEANUP_BATCH_WAIT_MS` | `100` | Cleanup-worker batch collection wait |
+| `FRONTIER_ADMISSION_WORKERS` | `1` (`2` in Compose) | Independent Kafka/Redis admission lanes per Frontier admission process |
 | `EXTRACTOR_PROMETHEUS_PORT` | `8001` | Extractor |
 | `PROMETHEUS_PORT` | `9090` | Prometheus server host port |
 | `QDRANT_IMAGE` | `qdrant/qdrant:v1.19.1` | Pinned Qdrant image |

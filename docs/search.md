@@ -59,6 +59,13 @@ The service supports these environment variables:
 | `QDRANT_SPARSE_VECTOR_NAME` | `sparse` | Named sparse lexical vector in the collection. |
 | `SEARCH_VECTOR_DIMENSIONS` | `384` | Expected vector dimension. |
 | `SEARCH_AUTHORITY_WEIGHT` | `0.08` | Bounded (0–0.25) PageRank authority contribution to final candidate ordering. |
+| `SEARCH_RERANKER_WEIGHT` | `0.4` | Bounded lexical relevance boost applied to the hybrid candidate pool. |
+
+Hybrid retrieval fetches a larger candidate pool, removes duplicate source URLs,
+and applies a deterministic local reranker before returning results. Hybrid RRF
+scores are rank-fusion scores and are not filtered using a dense cosine-score
+threshold. Documents are cleaned and tiny or markup-only chunks are excluded
+before embedding.
 
 ## Link authority
 

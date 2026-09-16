@@ -34,7 +34,7 @@ def test_service_embeds_query_and_searches_repository():
     embedder, repository = FakeEmbedder(), FakeRepository()
     response = SearchService(embedder, repository).search(" photon ", 10, "")
     assert embedder.text == "photon"
-    assert repository.args[:3] == ([0.1, 0.2], 10, 0)
+    assert repository.args[:3] == ([0.1, 0.2], 50, 0)
     assert response["results"][0]["id"] == "one"
     assert response["retrieval"] == "dense"
 
@@ -65,9 +65,9 @@ def test_validate_request_defaults_and_rejects_bad_input():
         else:
             raise AssertionError("invalid request accepted")
 
-def test_service_filters_results_below_minimum_score():
+def test_service_keeps_hybrid_results_below_dense_score_floor():
     response = SearchService(FakeEmbedder(), MixedRepository()).search("photon", 10, "")
-    assert [item["id"] for item in response["results"]] == ["high"]
+    assert [item["id"] for item in response["results"]] == ["high", "low"]
 
 
 def test_service_uses_authority_to_rerank_textually_relevant_candidates():

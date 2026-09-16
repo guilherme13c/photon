@@ -19,6 +19,7 @@ pub const Service = struct {
     io: std.Io,
     producer: _KafkaProducer,
     minio_endpoint: []const u8,
+    max_discovered_urls_per_page: u32,
     html_processed_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     urls_extracted_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
     documents_produced_total: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
@@ -35,12 +36,14 @@ pub const Service = struct {
         io: std.Io,
         producer: _KafkaProducer,
         minio_endpoint: []const u8,
+        max_discovered_urls_per_page: u32,
     ) Service {
         return .{
             .allocator = allocator,
             .io = io,
             .producer = producer,
             .minio_endpoint = minio_endpoint,
+            .max_discovered_urls_per_page = max_discovered_urls_per_page,
         };
     }
 
@@ -71,17 +74,29 @@ pub const Service = struct {
             for (outbound_urls.items) |outbound_url| self.allocator.free(outbound_url);
             outbound_urls.deinit(self.allocator);
         }
+        var emitted_urls: u32 = 0;
         for (parsed.links.items) |link| {
+            if (emitted_urls >= self.max_discovered_urls_per_page) break;
             if (link.len == 0 or std.mem.startsWith(u8, link, "javascript:") or std.mem.startsWith(u8, link, "mailto:")) {
                 continue;
             }
             if (self.resolveUrl(url, link)) |resolved| {
                 defer self.allocator.free(resolved);
+                if (!isCrawlableUrl(resolved)) continue;
+                var duplicate = false;
+                for (outbound_urls.items) |existing| {
+                    if (std.mem.eql(u8, existing, resolved)) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) continue;
                 try outbound_urls.append(self.allocator, try self.allocator.dupe(u8, resolved));
                 self.producer.publishDiscoveredUrl(resolved) catch |err| {
                     std.log.err("Failed to publish extracted URL {s}: {}", .{ resolved, err });
                     continue;
                 };
+                emitted_urls += 1;
             } else |err| {
                 std.log.err("Failed to resolve URL {s} relative to {s}: {}", .{ link, url, err });
             }
@@ -183,6 +198,19 @@ pub const Service = struct {
                 return std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ base_dir, rel_url });
             }
         }
+    }
+
+    fn isCrawlableUrl(url: []const u8) bool {
+        if (!(std.mem.startsWith(u8, url, "http://") or std.mem.startsWith(u8, url, "https://"))) return false;
+        for (url) |ch| {
+            if (ch < 0x20 or ch == '\\' or ch == '"') return false;
+        }
+        const blocked = [_][]const u8{
+            "action=edit", "/wp-admin", "/wp-login", "/login", "/signup", "/register",
+            "/search", "/upload", "/share", "Special:Upload", "Special:Random",
+        };
+        for (blocked) |needle| if (std.mem.indexOf(u8, url, needle) != null) return false;
+        return true;
     }
 
     fn kafkaHandler(ctx: *anyopaque, key: []const u8, value: []const u8) anyerror!void {
@@ -306,7 +334,7 @@ test "Service processes HTML and produces messages" {
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
     var producer = MockKafkaProducer.init();
 
-    var svc = Service.init(std.testing.allocator, undefined, producer.interface(), "http://dummy");
+    var svc = Service.init(std.testing.allocator, undefined, producer.interface(), "http://dummy", 100);
 
     const html =
         \\<html><head><title>Test</title></head>
@@ -322,7 +350,7 @@ test "Service processes HTML and produces messages" {
 test "Service rejects tiny boilerplate documents before indexing" {
     const MockKafkaProducer = @import("../repository/kafka/producer/mock.zig").MockKafkaProducer;
     var producer = MockKafkaProducer.init();
-    var svc = Service.init(std.testing.allocator, undefined, producer.interface(), "http://dummy");
+    var svc = Service.init(std.testing.allocator, undefined, producer.interface(), "http://dummy", 100);
 
     try svc.processHtml("http://test.com", "<html><body><p>tiny words only</p></body></html>", "dummy-key.html", null, null);
 

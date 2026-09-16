@@ -60,6 +60,17 @@ pub const Service = struct {
         dlq: _KafkaProducer,
         discovered_urls_topic: []const u8,
     ) Service {
+        return initWithRobotsTimeout(allocator, io, cache, dlq, discovered_urls_topic, 2);
+    }
+
+    pub fn initWithRobotsTimeout(
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        cache: _Redis,
+        dlq: _KafkaProducer,
+        discovered_urls_topic: []const u8,
+        robots_request_timeout_seconds: u16,
+    ) Service {
         return .{
             .allocator = allocator,
             .io = io,
@@ -71,6 +82,7 @@ pub const Service = struct {
                 io,
                 cache,
                 "frontier-bot",
+                robots_request_timeout_seconds,
             ),
             .scheduler = Scheduler.init(
                 cache,
@@ -131,6 +143,7 @@ pub const Service = struct {
         const domain = extractDomain(normalized.canonical);
 
         const robots = try self.robots.check(normalized, domain);
+        defer robots.deinit(self.allocator);
         if (!robots.allowed) {
             try self.dlq.publishDeadLetter(
                 normalized.canonical,
@@ -148,15 +161,18 @@ pub const Service = struct {
         if (already_seeded) |value| {
             self.allocator.free(value);
         } else {
-            const robots_key = try std.fmt.allocPrint(self.allocator, "robots:{s}:{s}", .{ schemeFor(normalized.canonical), domain });
-            defer self.allocator.free(robots_key);
-            if (try self.cache.getCache(self.allocator, robots_key)) |policy| {
-                defer self.allocator.free(policy);
+            if (robots.policy) |policy| {
                 const declared = try Sitemap.declarations(self.allocator, policy, 8);
                 defer { for (declared) |sitemap_url| self.allocator.free(sitemap_url); self.allocator.free(declared); }
-                for (declared) |sitemap_url| self.processUrl(sitemap_url) catch |err| {
-                    std.log.warn("Failed to schedule sitemap {s}: {}", .{ sitemap_url, err });
-                };
+                for (declared) |sitemap_url| {
+                    // Keep sitemap expansion off the admission critical path.
+                    // It is durable candidate work and will receive its own
+                    // robots/dedupe/scheduling decision from an admission
+                    // lane, just like an extracted link.
+                    self.dlq.publishUrl(self.discovered_urls_topic, domain, sitemap_url) catch |err| {
+                        std.log.warn("Failed to publish sitemap candidate {s}: {}", .{ sitemap_url, err });
+                    };
+                }
             }
             try self.cache.setCache(sitemap_marker, "1", 86400);
         }

@@ -41,6 +41,12 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
     if (std.c.getenv("KAFKA_DYNAMIC_URLS_TOPIC")) |val| {
         config.kafka_dynamic_urls_topic = try allocator.dupe(u8, std.mem.span(val));
     }
+    if (std.c.getenv("FRONTIER_ADMISSION_WORKERS")) |val| {
+        config.admission_workers = std.fmt.parseInt(u8, std.mem.span(val), 10) catch config.admission_workers;
+    }
+    if (std.c.getenv("ROBOTS_REQUEST_TIMEOUT_SECONDS")) |val| {
+        config.robots_request_timeout_seconds = std.fmt.parseInt(u16, std.mem.span(val), 10) catch config.robots_request_timeout_seconds;
+    }
 
     var file = std.Io.Dir.cwd().openFile(
         io,
@@ -113,6 +119,10 @@ pub fn parseEnv(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Cf
             config.kafka_urls_topic = try allocator.dupe(u8, val);
         } else if (std.mem.eql(u8, key, "KAFKA_DYNAMIC_URLS_TOPIC")) {
             config.kafka_dynamic_urls_topic = try allocator.dupe(u8, val);
+        } else if (std.mem.eql(u8, key, "FRONTIER_ADMISSION_WORKERS")) {
+            config.admission_workers = std.fmt.parseInt(u8, val, 10) catch config.admission_workers;
+        } else if (std.mem.eql(u8, key, "ROBOTS_REQUEST_TIMEOUT_SECONDS")) {
+            config.robots_request_timeout_seconds = std.fmt.parseInt(u16, val, 10) catch config.robots_request_timeout_seconds;
         }
     }
 

@@ -8,6 +8,16 @@ const c = @cImport({
 pub const KafkaProducer = struct {
     rk: *c.rd_kafka_t,
     topic: *c.rd_kafka_topic_t,
+    // URL topics are stable for the lifetime of the producer. Keep their
+    // librdkafka handles alive instead of creating and destroying one for
+    // every admitted or dispatched URL.
+    // The manager publishes to the two fetcher topics and the admission
+    // service may publish to the discovered-URL topic. Keep enough stable
+    // handles for every configured URL destination; creating a handle per
+    // message previously exhausted this small cache and surfaced as
+    // error.TooManyKafkaTopics under normal crawling.
+    cached_topics: [4]?*c.rd_kafka_topic_t = .{ null, null, null, null },
+    cached_topic_names: [4]?[]const u8 = .{ null, null, null, null },
 
     pub fn init(brokers: []const u8, topic_name: []const u8) !KafkaProducer {
         var errstr: [512]u8 = undefined;
@@ -60,6 +70,9 @@ pub const KafkaProducer = struct {
     }
 
     pub fn deinit(self: *KafkaProducer) void {
+        for (self.cached_topics) |maybe_topic| {
+            if (maybe_topic) |cached| c.rd_kafka_topic_destroy(cached);
+        }
         c.rd_kafka_topic_destroy(self.topic);
         _ = c.rd_kafka_flush(self.rk, 5000);
         c.rd_kafka_destroy(self.rk);
@@ -78,15 +91,18 @@ pub const KafkaProducer = struct {
     fn publishDeadLetter(ctx: *anyopaque, url: []const u8, reason: []const u8) anyerror!void {
         const self: *KafkaProducer = @ptrCast(@alignCast(ctx));
 
-        var buf: [2048]u8 = undefined;
-        const payload = try std.fmt.bufPrint(
-            &buf,
+        // Candidate URLs and diagnostic reasons are not bounded by the old
+        // fixed buffer. Allocate the complete payload so one large malformed
+        // candidate cannot surface as NoSpaceLeft and stop an admission lane.
+        const payload = try std.fmt.allocPrint(
+            std.heap.c_allocator,
             "{{\"url\":\"{s}\",\"reason\":\"{s}\"}}",
             .{
                 url,
                 reason,
             },
         );
+        defer std.heap.c_allocator.free(payload);
 
         const res = c.rd_kafka_produce(
             self.topic,
@@ -113,19 +129,31 @@ pub const KafkaProducer = struct {
     fn publishUrl(ctx: *anyopaque, topic_name: []const u8, key: []const u8, url: []const u8) anyerror!void {
         const self: *KafkaProducer = @ptrCast(@alignCast(ctx));
 
-        var topic_buf: [256]u8 = undefined;
-        if (topic_name.len >= topic_buf.len) return error.TopicTooLong;
-        @memcpy(topic_buf[0..topic_name.len], topic_name);
-        topic_buf[topic_name.len] = 0;
-
-        const topic = c.rd_kafka_topic_new(
-            self.rk,
-            &topic_buf,
-            null,
-        ) orelse {
-            return error.KafkaTopicFailed;
-        };
-        defer c.rd_kafka_topic_destroy(topic);
+        var topic: *c.rd_kafka_topic_t = undefined;
+        for (self.cached_topic_names, 0..) |maybe_name, index| {
+            if (maybe_name) |name| {
+                if (std.mem.eql(u8, name, topic_name)) {
+                    topic = self.cached_topics[index].?;
+                    break;
+                }
+            }
+        } else {
+            var free_slot: ?usize = null;
+            for (self.cached_topic_names, 0..) |maybe_name, index| {
+                if (maybe_name == null) {
+                    free_slot = index;
+                    break;
+                }
+            }
+            const index = free_slot orelse return error.TooManyKafkaTopics;
+            var topic_buf: [256]u8 = undefined;
+            if (topic_name.len >= topic_buf.len) return error.TopicTooLong;
+            @memcpy(topic_buf[0..topic_name.len], topic_name);
+            topic_buf[topic_name.len] = 0;
+            topic = c.rd_kafka_topic_new(self.rk, &topic_buf, null) orelse return error.KafkaTopicFailed;
+            self.cached_topics[index] = topic;
+            self.cached_topic_names[index] = topic_name;
+        }
 
         const res = c.rd_kafka_produce(
             topic,

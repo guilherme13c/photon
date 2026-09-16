@@ -57,6 +57,22 @@ groups:
         annotations:
           summary: "Photon consumer lag is above 10,000 records"
           runbook: "docs/slo.md#freshness-objective"
+      - alert: PhotonAdmissionLagHigh
+        expr: sum(kafka_consumergroup_lag{consumergroup="admission-workers"}) > 10000
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Frontier admission lag is above 10,000 discovered URLs"
+          runbook: "docs/slo.md#freshness-objective"
+      - alert: PhotonAdmissionLagGrowing
+        expr: deriv((sum(kafka_consumergroup_lag{consumergroup="admission-workers"}))[10m:]) > 0
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Frontier admission backlog is growing continuously"
+          runbook: "docs/slo.md#freshness-objective"
       - alert: PhotonShortTermThroughputSLOViolation
         # At least one document/s is eligible at Extractor, but fewer than 95%
         # of that rate is reaching Qdrant. It is not evaluated for idle crawls.
