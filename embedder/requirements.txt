@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 confluent-kafka
 sentence-transformers
 torch==2.5.1+cpu
