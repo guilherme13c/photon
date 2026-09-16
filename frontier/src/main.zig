@@ -48,6 +48,7 @@ fn runAdmissionWorker(args: AdmissionWorkerArgs) void {
         args.cfg.kafka_ingest_topic,
         args.cfg.robots_request_timeout_seconds,
     );
+    defer service.deinit();
     service.startConsuming(consumer.interface()) catch |err| {
         std.log.err("Admission worker stopped: {}", .{err});
     };
@@ -97,6 +98,7 @@ pub fn main(init: std.process.Init) !void {
     var kafka_producer = try KafkaProducer.init(cfg.kafka_brokers, cfg.kafka_dlq_topic);
     defer kafka_producer.deinit();
     var service = Service.init(allocator, init.io, redis.interface(), kafka_producer.interface(), cfg.kafka_ingest_topic);
+    defer service.deinit();
 
     // Candidate URLs enter the durable Kafka topic through the REST surface;
     // manager instances do not consume that backlog or perform admission.

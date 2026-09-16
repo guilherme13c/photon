@@ -93,6 +93,10 @@ pub const Service = struct {
         };
     }
 
+    pub fn deinit(self: *Service) void {
+        self.robots.deinit();
+    }
+
     /// Records synchronous API admission time without URL or host labels.
     pub fn observeAdmissionDuration(self: *Service, elapsed_ns: u64) void {
         for (processing_latency_bucket_ns, 0..) |upper_bound, index| {
@@ -354,6 +358,7 @@ test "Service persists ingestion batches before admission" {
         dlq.interface(),
         "discovered-urls",
     );
+    defer svc.deinit();
     const urls = [_][]const u8{
         "http://example.com/one",
         "http://example.org/two",
@@ -382,6 +387,7 @@ test "Service pipeline processes valid new URL" {
         dlq.interface(),
         "discovered-urls",
     );
+    defer svc.deinit();
 
     try svc.processUrl("http://example.com/good_page");
 
@@ -407,6 +413,7 @@ test "Service pipeline drops duplicate URLs" {
         dlq.interface(),
         "discovered-urls",
     );
+    defer svc.deinit();
 
     try svc.processUrl("http://example.com/good_page");
     try svc.processUrl("http://example.com/good_page");
@@ -423,6 +430,7 @@ test "start permits are conservative and host scoped" {
     var threaded_io: std.Io.Threaded = .init_single_threaded;
     const io = threaded_io.io();
     var svc = Service.init(std.testing.allocator, io, cache.interface(), dlq.interface(), "discovered-urls");
+    defer svc.deinit();
 
     try std.testing.expect((try svc.acquireStartPermit("http://example.com/one")) == .granted);
     try std.testing.expect((try svc.acquireStartPermit("http://example.com/two")) == .retry_at_ms);
@@ -446,6 +454,7 @@ test "Service pipeline publishes blacklisted extensions to DLQ" {
         dlq.interface(),
         "discovered-urls",
     );
+    defer svc.deinit();
 
     try svc.processUrl("http://example.com/document.pdf");
 

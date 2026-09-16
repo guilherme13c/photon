@@ -42,6 +42,18 @@ pub const RobotsChecker = struct {
         };
     }
 
+    pub fn deinit(self: *RobotsChecker) void {
+        self.inflight_mutex.lockUncancelable(self.io);
+        var iterator = self.inflight.iterator();
+        while (iterator.next()) |entry| {
+            self.allocator.free(entry.value_ptr.*.key);
+            self.allocator.free(entry.value_ptr.*.policy);
+            self.allocator.destroy(entry.value_ptr.*);
+        }
+        self.inflight.deinit();
+        self.inflight_mutex.unlock(self.io);
+    }
+
     pub const Decision = struct {
         allowed: bool,
         // null means the policy did not specify Crawl-delay.
@@ -378,6 +390,7 @@ test "single-flight retains the policy until the last participant releases" {
     var threaded_io: std.Io.Threaded = .init_single_threaded;
     const io = threaded_io.io();
     var checker = RobotsChecker.init(std.testing.allocator, io, mock.interface(), "frontier-bot", 2);
+    defer checker.deinit();
 
     const key = try std.testing.allocator.dupe(u8, "robots:https:example.com");
     const flight = try std.testing.allocator.create(RobotsChecker.RobotsFlight);
