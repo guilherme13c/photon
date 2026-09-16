@@ -114,7 +114,7 @@ test-cleanup-worker:
 	cd cleanup-worker && zig build test --summary all
 
 test-search:
-	cd search && . ../.venv/bin/activate && PYTHONPATH=. python -m pytest
+	cd search && PYTHONPATH=. sh -ec 'if [ -x ../.venv/bin/python ]; then exec ../.venv/bin/python -m pytest; else exec python3 -m pytest; fi'
 
 clean: clean-frontier clean-extractor clean-fetcher clean-renderer clean-embedder clean-cleanup-worker
 
